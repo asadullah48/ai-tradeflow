@@ -62,6 +62,15 @@ Phone:    03000000000
 Password: tradeflow123
 ```
 
+**Mobile** (optional, separate terminal - v1.1, see `mobile/README.md`):
+
+```bash
+cd mobile
+npm install
+cp .env.example .env
+npx expo start          # scan the QR code with Expo Go, or press w for web
+```
+
 **Tests:**
 
 ```bash
@@ -83,10 +92,14 @@ pytest -q          # 90 tests: unit, integration, and agent golden-questions
 - **90 real tests** covering invariants (stock, balance, aging edges),
   the full trade cycle end to end through the HTTP API, and the three
   flagship Munshi AI questions with tool-citation assertions.
+- **Mobile app (v1.1)**: an Expo Router companion covering the
+  on-the-go slice - dashboard, khata, Munshi AI chat - against the same
+  backend. See `mobile/README.md` for scope and setup.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how the pieces fit
-together, and `SESSION-1-SUMMARY.md` through `SESSION-4-SUMMARY.md` for
-what was built and verified in each phase of the spec's four-session plan.
+together, and `SESSION-1-SUMMARY.md` through `SESSION-5-SUMMARY.md` for
+what was built and verified in each phase (Sessions 1-4 = the original
+spec; Session 5 = the first post-v1 roadmap item, §12).
 
 ## Known deviations from the spec (disclosed, not hidden)
 
@@ -149,5 +162,8 @@ tradeflow/
 │   └── seed.py                            <- demo dataset generator
 ├── frontend/
 │   └── app/                                <- Next.js App Router pages
+├── mobile/
+│   ├── app/                                  <- Expo Router screens
+│   └── eas.json                                <- EAS build profiles
 └── docker-compose.yml
 ```
