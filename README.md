@@ -8,6 +8,22 @@ Built per [`SPEC-TRADEFLOW.md`](SPEC-TRADEFLOW.md) - a bilingual
 AI**, that reads the business's own data and answers questions like
 *"is haftay kya order karna chahiye?"* with grounded, cited recommendations.
 
+## Screenshots
+
+<!--
+  Drag your screenshots into docs/screenshots/ using the filenames below
+  and they'll show up here automatically - see docs/screenshots/README.md
+  for exactly what to capture. No markdown editing needed.
+-->
+
+| Dashboard | Khata (Ledger) |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Khata](docs/screenshots/khata.png) |
+
+| Munshi AI | Mobile |
+|---|---|
+| ![Munshi AI](docs/screenshots/munshi.png) | ![Mobile app](docs/screenshots/mobile.png) |
+
 ## Stack
 
 | Layer | Choice |
