@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tradeflow
+      POSTGRES_PASSWORD: tradeflow
+      POSTGRES_DB: tradeflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - tradeflow-db:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://tradeflow:tradeflow@db:5432/tradeflow
+      JWT_SECRET: dev-secret-change-me-in-production
+      FRONTEND_ORIGIN: http://localhost:3000
+    depends_on:
+      - db
+
+volumes:
+  tradeflow-db:
