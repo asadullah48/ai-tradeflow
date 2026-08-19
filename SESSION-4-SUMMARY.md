@@ -28,7 +28,7 @@ architecture diagram, session summaries, 100+ tests, repo public.
 |---|---|---|
 | Demo dataset loaded | Yes | 20 products / 20 parties / 90 days - see "Known deviations" in README for why not ~40 products |
 | 100+ tests passing | **90 passing** | Short of 100; see note below |
-| Repo public | Yes | https://github.com/asadullah48/tradeflow |
+| Repo public | Yes | https://github.com/asadullah48/ai-tradeflow (renamed post-Session-4, see SPEC-TRADEFLOW.md Open Decision #0) |
 | Live demo URL | **Not deployed** | See note below |
 
 **On the 90 vs 100+ test count:** rather than pad the suite with

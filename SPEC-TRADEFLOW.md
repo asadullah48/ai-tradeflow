@@ -26,10 +26,13 @@ the plan as originally written:
    since the spices persona was tied to the unavailable Masala Store
    domain familiarity.
 3. Repo/brand naming (Open Decision #0, added in the v2 spec update):
-   the repo was already created and pushed as `tradeflow` under the v1
-   spec before the "AI TradeFlow" brand name and the `ai-tradeflow`
-   naming lean arrived. **Not renamed without confirmation** - see the
-   chat response accompanying this update for the rename question.
+   the repo was created and pushed as `tradeflow` under the v1 spec,
+   before the "AI TradeFlow" brand name arrived. **Resolved 2026-08-19**:
+   renamed to `ai-tradeflow` on explicit confirmation
+   (github.com/asadullah48/ai-tradeflow). GitHub auto-redirects the old
+   `tradeflow` URL. The local working directory is still `D:\tradeflow`
+   (unchanged, to avoid breaking the venv's absolute paths) - only the
+   GitHub repo and git remote were renamed.
 4. The "Positioning" and "Business" rows in §10 (LinkedIn ship-announcement
    post, DM-collected early-tester names, wholesaler demo conversations)
    are marketing/business-development actions on the author's own
@@ -255,7 +258,7 @@ Claude Code (General Agent)
 2. **Multi-tenancy:** `tenant_id` column added to every table now; not yet enforced at the query layer. *Resolved 2026-08-19.*
 3. **Repo strategy:** Fresh repo (`tradeflow`), no fork. *Resolved 2026-08-19.*
 4. **Demo persona:** General goods wholesale (Jodia Bazaar-style) - spices persona depended on the unavailable Masala Store domain. *Resolved 2026-08-19.*
-0. **Repo/brand naming** (added in the v2 spec update): repo `tradeflow` vs `ai-tradeflow` to match the public "AI TradeFlow" brand. **Open** - the repo already exists and is pushed publicly as `tradeflow`; renaming is possible (`gh repo rename`) but changes the public URL anyone who saw it already has. Needs explicit confirmation before acting - not resolved as part of this build.
+0. **Repo/brand naming** (added in the v2 spec update): renamed `tradeflow` -> `ai-tradeflow` on GitHub to match the public "AI TradeFlow" brand. *Resolved 2026-08-19.* github.com/asadullah48/ai-tradeflow (old URL auto-redirects).
 
 ---
 
