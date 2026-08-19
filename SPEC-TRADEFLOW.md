@@ -1,7 +1,8 @@
 # SPEC-TRADEFLOW.md
-## AI-Powered Inventory & Accounting Platform for Pakistan's Wholesalers
+## AI TradeFlow — AI-Powered Inventory & Accounting Platform for Pakistan's Wholesalers
 
-**Project:** TradeFlow — Portfolio Project 1 of the "AI for Pakistan Trade" series
+**Project:** AI TradeFlow — Portfolio Project 1 of the "AI for Pakistan Trade" series
+**Public commitment:** Mission announced on LinkedIn (Aug 19, 2026) with AI TradeFlow vision banner. Banner promises the full platform (sourcing, marketing, logistics, documentation, negotiation); this spec covers **v1 = the wholesaler back-office module only**. Launch communications must state the build order explicitly: back-office first, sourcing later.
 **Author:** Asadullah Shafique (github.com/asadullah48)
 **Methodology:** Spec-First, Four-Session Execution
 **Base repos (reuse sources):** cmt-stitching-system (primary), masala-store (bilingual UI), h3-advanced-todo (agent patterns, constitutional AI)
@@ -14,15 +15,26 @@
 
 This spec's own status line says "DRAFT" with a target start of early
 September 2026. On explicit instruction, all four sessions below were
-executed immediately instead, in one continuous build. Two source
-deviations from the plan as originally written:
+executed immediately instead, in one continuous build. Deviations from
+the plan as originally written:
 
 1. `masala-store` (the bilingual UI reuse source) could not be located on
-   this machine. The i18n/RTL layer was built fresh (`next-intl` +
-   `dir="rtl"` switching) rather than ported, per explicit instruction.
+   this machine. The i18n/RTL layer was built fresh - a lightweight
+   custom React context (`frontend/lib/i18n.tsx`), not `next-intl` and
+   not ported from masala-store - per explicit instruction.
 2. Demo persona: general goods wholesale (Jodia Bazaar-style), not spices,
    since the spices persona was tied to the unavailable Masala Store
    domain familiarity.
+3. Repo/brand naming (Open Decision #0, added in the v2 spec update):
+   the repo was already created and pushed as `tradeflow` under the v1
+   spec before the "AI TradeFlow" brand name and the `ai-tradeflow`
+   naming lean arrived. **Not renamed without confirmation** - see the
+   chat response accompanying this update for the rename question.
+4. The "Positioning" and "Business" rows in §10 (LinkedIn ship-announcement
+   post, DM-collected early-tester names, wholesaler demo conversations)
+   are marketing/business-development actions on the author's own
+   accounts - outside what an engineering build in this repo can do or
+   verify. Not attempted here; flagged, not silently marked done.
 
 Everything else follows the plan below as written.
 
@@ -99,6 +111,10 @@ Target: ≥70% reuse (consistent with H2→H3 trajectory).
 | CI | GitHub Actions | Existing workflow templates |
 
 **Deliberately out of scope for v1:** Kubernetes/Dapr, mobile app (Expo build optional in v2), FBR tax integration, multi-branch sync, barcode scanning.
+
+**Banner-promised, deferred to later phases:** supplier search/matching ("2,418 verified"), shipment/order tracking, automated logistics, price negotiation agent. These belong to the TradeGuide/sourcing roadmap (~6+ months out). Do not let DM interest in these pull scope into v1.
+
+**Adjacent market (parked):** schools/colleges fee-ledger use case (mentioned in launch post). The ledger + aging engine ports to fee management with ~30% rework - treat as opportunistic v1.x revenue if a client appears, but keep all public positioning on the trade economy niche.
 
 ---
 
@@ -228,17 +244,18 @@ Claude Code (General Agent)
 | Performance | <500 ms p95 on API |
 | Agent quality | 3 flagship questions answered correctly with citations on demo dataset |
 | Ship | Live demo URL + public repo + README by end of Session 4 |
-| Positioning | 1 LinkedIn build-in-public launch post |
-| Business | 2 real wholesaler conversations booked using the live demo (validation, not sales) |
+| Positioning | Mission post DONE (Aug 19, per author). Remaining: 1 ship-announcement post at Session 4 (Stratified Signal visual, "back-office first" framing) - **not done by this build; a marketing action on the author's own LinkedIn account** |
+| Business | 5-10 early-tester names from launch-post DMs before Session 1; 2 real wholesaler demo conversations by Session 4 - **not done by this build; business-development actions outside repo scope** |
 
 ---
 
-## 11. Open Decisions (resolved 2026-08-19)
+## 11. Open Decisions
 
-1. **Urdu input for Munshi AI:** Both Urdu script and Roman Urdu accepted as input, Roman Urdu output default.
-2. **Multi-tenancy:** `tenant_id` column added to every table now; not yet enforced at the query layer.
-3. **Repo strategy:** Fresh repo (`tradeflow`), no fork.
-4. **Demo persona:** General goods wholesale (Jodia Bazaar-style) - spices persona depended on the unavailable Masala Store domain.
+1. **Urdu input for Munshi AI:** Both Urdu script and Roman Urdu accepted as input, Roman Urdu output default. *Resolved 2026-08-19.*
+2. **Multi-tenancy:** `tenant_id` column added to every table now; not yet enforced at the query layer. *Resolved 2026-08-19.*
+3. **Repo strategy:** Fresh repo (`tradeflow`), no fork. *Resolved 2026-08-19.*
+4. **Demo persona:** General goods wholesale (Jodia Bazaar-style) - spices persona depended on the unavailable Masala Store domain. *Resolved 2026-08-19.*
+0. **Repo/brand naming** (added in the v2 spec update): repo `tradeflow` vs `ai-tradeflow` to match the public "AI TradeFlow" brand. **Open** - the repo already exists and is pushed publicly as `tradeflow`; renaming is possible (`gh repo rename`) but changes the public URL anyone who saw it already has. Needs explicit confirmation before acting - not resolved as part of this build.
 
 ---
 

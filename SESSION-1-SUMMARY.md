@@ -40,3 +40,21 @@ frozen module-by-module).
 touching a real password. Fixed by dropping `passlib` and hashing
 directly with the `bcrypt` package (`backend/app/auth/security.py`) -
 less code, no legacy dependency, no hidden self-test.
+
+## A gap found on later review, and closed
+
+A post-hoc audit against this session's own checkpoint ("SQLAlchemy
+models + Alembic migrations") found that Alembic had only been scaffolded
+as an empty `alembic/versions/` folder - the app was actually relying
+entirely on `Base.metadata.create_all()` at startup, which works for
+SQLite dev but isn't how you manage schema changes against a real
+production Postgres database. Closed by properly running `alembic init`,
+wiring `alembic/env.py` to the app's own `Base.metadata` and
+`DATABASE_URL` setting, and generating+applying an initial migration
+(`alembic/versions/dac..._initial_schema.py`) covering all 10 tables -
+verified against SQLite; not live-verified against Postgres since Docker
+Desktop wasn't running in this environment, but the generated migration
+uses only standard, portable SQLAlchemy types (String, Float,
+DateTime(timezone=True), JSON, ForeignKey), so risk is low. The
+Docker/Railway startup commands now run `alembic upgrade head` before
+starting the server.

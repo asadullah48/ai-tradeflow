@@ -34,6 +34,18 @@ python seed.py                    # realistic 90-day demo dataset
 uvicorn app.main:app --reload --port 8000
 ```
 
+**Database migrations** (Alembic - only needed once you point `DATABASE_URL`
+at a real Postgres instance; SQLite dev mode auto-creates tables on startup):
+
+```bash
+cd backend
+alembic upgrade head          # applies backend/alembic/versions/*
+alembic revision --autogenerate -m "describe your model change"   # after editing a model
+```
+
+The Docker/Railway startup command runs `alembic upgrade head`
+automatically before starting the server.
+
 **Frontend** (separate terminal):
 
 ```bash
