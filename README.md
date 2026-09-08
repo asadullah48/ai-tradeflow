@@ -133,6 +133,31 @@ spec; Session 5 = the first post-v1 roadmap item, §12).
   infrastructure with real credentials wasn't done as part of this build -
   see "Deploying" below for the exact steps to finish that yourself.
 
+## 🧭 Agentic AI Alignment
+
+Munshi AI is a real, bounded agent, not a wrapper around a chat model:
+- **Autonomy** — it reads the business's own inventory/ledger data through 5
+  read-only tools and answers questions like *"is haftay kya order karna
+  chahiye?"* on its own, citing the data it used.
+- **Resilience** — a deterministic constitutional guardrail (BLOCK/FLAG
+  patterns) runs *before* any LLM call, and a graceful offline fallback
+  means the feature never hard-crashes if the model API has a bad moment.
+- **Adaptivity** — the same agent operates bilingually (Urdu + English) and
+  is exercised by golden-question tests with tool-citation assertions, so
+  its answers stay grounded as the underlying data changes.
+
+## 📈 Roadmap
+Tracked from the disclosed gaps above and `SESSION-5-SUMMARY.md` (§12):
+- [ ] Provision live Railway/Vercel infrastructure with real credentials
+- [ ] Grow the product catalog from ~20 items back toward the ~40 in the spec
+- [ ] Finish porting the mobile app's remaining screens beyond dashboard/khata/Munshi AI chat
+
+## 👨‍💻 Author
+Built by **Asadullah Shafique** — Portfolio Project 1 of the "AI for
+Pakistan Trade" series.
+
+🔗 [asadullahshafique-devunity.vercel.app](https://asadullahshafique-devunity.vercel.app)
+
 ## Deploying
 
 **Frontend (Vercel):**
