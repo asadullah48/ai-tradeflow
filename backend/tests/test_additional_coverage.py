@@ -17,6 +17,9 @@ def test_negative_balance_means_payable(db_session):
 def test_list_sale_orders_endpoint(client, auth_headers):
     customer = client.post("/parties", json={"name": "List Customer", "type": "customer"}, headers=auth_headers).json()
     product = client.post("/products", json={"sku": "LIST-1", "name": "List Widget"}, headers=auth_headers).json()
+    supplier = client.post("/parties", json={"name": "Fixture Supplier", "type": "supplier"}, headers=auth_headers).json()
+    client.post("/purchase-orders", json={"party_id": supplier["id"], "date": str(date.today()),
+        "items": [{"product_id": product["id"], "qty": 1, "unit_price": 5}]}, headers=auth_headers)
     client.post(
         "/sale-orders",
         json={"party_id": customer["id"], "date": str(date.today()), "items": [{"product_id": product["id"], "qty": 1, "unit_price": 10}]},
@@ -43,6 +46,9 @@ def test_list_purchase_orders_endpoint(client, auth_headers):
 def test_update_sale_order_status(client, auth_headers):
     customer = client.post("/parties", json={"name": "Status Customer", "type": "customer"}, headers=auth_headers).json()
     product = client.post("/products", json={"sku": "STATUS-1", "name": "Status Widget"}, headers=auth_headers).json()
+    supplier = client.post("/parties", json={"name": "Fixture Supplier", "type": "supplier"}, headers=auth_headers).json()
+    client.post("/purchase-orders", json={"party_id": supplier["id"], "date": str(date.today()),
+        "items": [{"product_id": product["id"], "qty": 1, "unit_price": 5}]}, headers=auth_headers)
     order = client.post(
         "/sale-orders",
         json={"party_id": customer["id"], "date": str(date.today()), "items": [{"product_id": product["id"], "qty": 1, "unit_price": 10}]},

@@ -49,7 +49,7 @@ def test_reorder_recommendation_zero_when_stock_is_high(db_session):
 
 
 def test_reorder_recommendation_positive_when_stock_is_low(db_session):
-    customer, product = setup_customer_and_product(db_session, current_stock=0)
+    customer, product = setup_customer_and_product(db_session, current_stock=30)
     order_service.create_sale_order(db_session, party_id=customer.id, order_date=date.today(), items=[{"product_id": product.id, "qty": 30, "unit_price": 20}])
 
     results = velocity_service.get_sales_velocity(db_session, product_id=product.id, days=30)

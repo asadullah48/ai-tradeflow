@@ -1,107 +1,251 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import RequireAuth from "@/components/RequireAuth";
+import { Heading, Field, Notice, Loading } from "@/components/Workspace";
 import { api, apiFileUrl } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
-
-type Balance = { party_id: string; party_name: string; balance: number; aging: { label: string; amount: number }[] };
-type LedgerEntry = { id: string; date: string; type: string; amount: number; method: string; note: string | null };
-
-function KhataDetailContent() {
+import { money, today } from "@/lib/format";
+type Balance = {
+  party_id: string;
+  party_name: string;
+  balance: number;
+  aging: { label: string; amount: number }[];
+};
+type Entry = {
+  id: string;
+  date: string;
+  type: string;
+  amount: number;
+  method: string;
+  note: string | null;
+};
+function Content() {
+  const { partyId } = useParams<{ partyId: string }>();
   const { t } = useI18n();
-  const params = useParams<{ partyId: string }>();
-  const partyId = params.partyId;
-  const token = useAuthStore((s) => s.token);
-
   const [balance, setBalance] = useState<Balance | null>(null);
-  const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [amount, setAmount] = useState(0);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [amount, setAmount] = useState("");
+  const [direction, setDirection] = useState("credit");
   const [method, setMethod] = useState("cash");
-
-  function load() {
-    api.get<Balance>(`/ledger/parties/${partyId}/balance`).then(setBalance);
-    api.get<LedgerEntry[]>(`/ledger/parties/${partyId}`).then(setEntries);
-  }
-
-  useEffect(() => { load(); }, [partyId]);
-
-  async function recordPayment(e: React.FormEvent) {
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const [b, e] = await Promise.all([
+        api.get<Balance>(`/ledger/parties/${partyId}/balance`),
+        api.get<Entry[]>(`/ledger/parties/${partyId}`),
+      ]);
+      setBalance(b);
+      setEntries(e);
+      setDirection(b.balance < 0 ? "debit" : "credit");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("loadFailed"));
+    }
+  }, [partyId, t]);
+  useEffect(() => {
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
+  async function pay(e: React.FormEvent) {
     e.preventDefault();
-    if (amount <= 0) return;
-    await api.post("/ledger/entries", {
-      party_id: partyId, date: new Date().toISOString().slice(0, 10), type: "credit", amount, method,
-    });
-    setAmount(0);
-    load();
+    if (busy || Number(amount) <= 0) return;
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.post("/ledger/entries", {
+        party_id: partyId,
+        date: today(),
+        type: direction,
+        amount: Number(amount),
+        method,
+      });
+      setAmount("");
+      setSaved(true);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("loadFailed"));
+    } finally {
+      setBusy(false);
+    }
   }
-
-  async function downloadPdf() {
-    const res = await fetch(apiFileUrl(`/reports/party-statement/${partyId}/pdf`), {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.click();
-    URL.revokeObjectURL(url);
+  async function copy() {
+    try {
+      const r = await api.get<{ text: string }>(
+        `/reports/party-statement/${partyId}`,
+      );
+      await navigator.clipboard.writeText(r.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setError(t("loadFailed"));
+    }
   }
-
-  if (!balance) return <p>{t("loading")}</p>;
-
+  async function pdf() {
+    try {
+      const r = await fetch(
+        apiFileUrl(`/reports/party-statement/${partyId}/pdf`),
+        {
+          headers: { Authorization: `Bearer ${useAuthStore.getState().token}` },
+        },
+      );
+      if (!r.ok) throw new Error();
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `statement-${partyId}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setError(t("loadFailed"));
+    }
+  }
   return (
-    <div>
-      <h1 className="text-2xl font-bold">{balance.party_name}</h1>
-      <p className="mt-1 text-xl">
-        {t("balance")}: <span className={balance.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}>Rs {balance.balance.toLocaleString()}</span>
-      </p>
-
-      <div className="mt-3 flex gap-4 text-sm">
-        {balance.aging.map((a) => (
-          <span key={a.label} className={a.amount > 0 && a.label !== "current" ? "text-red-600 dark:text-red-400" : ""}>
-            {a.label}: Rs {a.amount.toLocaleString()}
-          </span>
-        ))}
-      </div>
-
-      <button onClick={downloadPdf} className="mt-3 rounded-full border border-black/10 px-4 py-1 text-sm dark:border-white/20">
-        Download PDF statement
-      </button>
-
-      <form onSubmit={recordPayment} className="mt-6 flex flex-wrap items-end gap-2 rounded-lg border border-black/10 p-4 dark:border-white/10">
-        <input type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} placeholder="Amount" className="rounded border border-black/10 px-2 py-1 dark:border-white/20" />
-        <select value={method} onChange={(e) => setMethod(e.target.value)} className="rounded border border-black/10 px-2 py-1 dark:border-white/20">
-          <option value="cash">Cash</option>
-          <option value="bank">Bank</option>
-          <option value="jazzcash">JazzCash</option>
-          <option value="easypaisa">Easypaisa</option>
-        </select>
-        <button type="submit" className="rounded-full bg-black px-4 py-1 text-sm text-white dark:bg-white dark:text-black">Record payment</button>
-      </form>
-
-      <ul className="mt-6 space-y-1 text-sm">
-        {entries.map((entry) => (
-          <li key={entry.id} className="flex justify-between border-b border-black/5 py-1 dark:border-white/10">
-            <span>{entry.date} - {entry.method} {entry.note ? `(${entry.note})` : ""}</span>
-            <span className={entry.type === "debit" ? "text-red-600 dark:text-red-400" : "text-green-700 dark:text-green-400"}>
-              {entry.type === "debit" ? "+" : "-"}Rs {entry.amount.toLocaleString()}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <>
+      <Link href="/khata" className="muted mb-4 inline-block text-sm underline">
+        {t("khata")}
+      </Link>
+      {error && (
+        <Notice>
+          {error}{" "}
+          <button onClick={load} className="underline">
+            {t("retry")}
+          </button>
+        </Notice>
+      )}
+      {!balance ? (
+        <Loading />
+      ) : (
+        <>
+          <Heading
+            title={balance.party_name}
+            description={t("khataSubtitle")}
+            action={
+              <div className="flex flex-wrap gap-2">
+                <button onClick={copy} className="button-secondary">
+                  {copied ? t("copied") : t("copyStatement")}
+                </button>
+                <button onClick={pdf} className="button-secondary">
+                  {t("downloadPdf")}
+                </button>
+              </div>
+            }
+          />
+          <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
+            <div className="panel !bg-[#102f3a] text-white">
+              <p className="text-sm text-[#b4cbd2]">
+                {t(
+                  balance.balance > 0
+                    ? "receivable"
+                    : balance.balance < 0
+                      ? "payable"
+                      : "settled",
+                )}
+              </p>
+              <p className="number mt-4 text-3xl font-semibold">
+                {money(Math.abs(balance.balance))}
+              </p>
+            </div>
+            <div className="panel grid grid-cols-2 gap-5 sm:grid-cols-4">
+              {balance.aging.map((a) => (
+                <div key={a.label}>
+                  <p className="muted text-sm">
+                    {a.label === "current" ? t("ageCurrent") : `${a.label} ${t("days")}`}
+                  </p>
+                  <p className="number mt-3 font-semibold">{money(a.amount)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          {saved && (
+            <p
+              role="status"
+              className="mb-4 rounded-xl bg-teal-50 p-4 text-sm text-teal-800"
+            >
+              {t("paymentSaved")}
+            </p>
+          )}
+          <form onSubmit={pay} className="panel mb-7">
+            <h2 className="mb-4 font-semibold">{t("recordPayment")}</h2>
+            <div className="grid items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Field label={t("amount")}>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              </Field>
+              <Field label={t("paymentDirection")}>
+                <select
+                  value={direction}
+                  onChange={(e) => setDirection(e.target.value)}
+                >
+                  <option value="credit">{t("receivedPayment")}</option>
+                  <option value="debit">{t("paidPayment")}</option>
+                </select>
+              </Field>
+              <Field label={t("paymentMethod")}>
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value)}
+                >
+                  <option value="cash">{t("cash")}</option>
+                  <option value="bank">{t("bank")}</option>
+                  <option value="jazzcash">JazzCash</option>
+                  <option value="easypaisa">Easypaisa</option>
+                </select>
+              </Field>
+              <button type="submit" disabled={busy} className="button-primary">
+                {busy ? t("saving") : t("save")}
+              </button>
+            </div>
+          </form>
+          <h2 className="mb-4 text-lg font-semibold">{t("ledgerHistory")}</h2>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t("date")}</th>
+                  <th>{t("paymentMethod")}</th>
+                  <th>{t("note")}</th>
+                  <th>{t("amount")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((e) => (
+                  <tr key={e.id}>
+                    <td className="number">{e.date}</td>
+                    <td>{e.method}</td>
+                    <td>{e.note ?? "—"}</td>
+                    <td className="number font-medium">
+                      {e.type === "debit" ? "+" : "−"}
+                      {money(e.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!entries.length && (
+              <p className="muted p-5 text-sm">{t("noData")}</p>
+            )}
+          </div>
+        </>
+      )}
+    </>
   );
 }
-
-export default function KhataDetailPage() {
+export default function Page() {
   return (
     <RequireAuth>
-      <KhataDetailContent />
+      <Content />
     </RequireAuth>
   );
 }

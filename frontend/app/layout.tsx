@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { I18nProvider } from "@/lib/i18n";
 import Nav from "@/components/Nav";
@@ -14,18 +14,40 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const urdu = Noto_Sans_Arabic({
+  variable: "--font-urdu",
+  subsets: ["arabic"],
+  preload: false,
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "TradeFlow",
+  title: { default: "AI TradeFlow", template: "%s | AI TradeFlow" },
   description: "AI-powered inventory & accounting for Pakistan's wholesalers",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-white text-black dark:bg-black dark:text-white">
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} ${urdu.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col">
         <I18nProvider>
+          <a
+            href="#workspace"
+            className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:p-4"
+          >
+            Skip to workspace
+          </a>
           <Nav />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+          <main id="workspace" className="app-main flex-1">
+            {children}
+          </main>
         </I18nProvider>
       </body>
     </html>

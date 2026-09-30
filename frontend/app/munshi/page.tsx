@@ -1,96 +1,190 @@
 "use client";
-
-import { useState } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import RequireAuth from "@/components/RequireAuth";
+import { Heading, Field } from "@/components/Workspace";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-
-type Message = { role: "user" | "munshi"; text: string; blocked?: boolean; toolsCalled?: string[] };
-
-const SUGGESTIONS = [
-  "is haftay kya order karna chahiye?",
-  "kis ka udhaar sab se purana hai?",
-  "pichlay mahinay ka profit summary batao",
-];
-
-function MunshiContent() {
-  const { t } = useI18n();
+type Message = {
+  role: "user" | "munshi";
+  text: string;
+  blocked?: boolean;
+  flagged?: boolean;
+  tools?: string[];
+};
+function Content() {
+  const { t, lang } = useI18n();
+  const params = useSearchParams();
+  const [input, setInput] = useState(() => params.get("q") ?? "");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-
+  const bottom = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: "nearest" });
+  }, [messages, loading]);
   async function ask(question: string) {
-    if (!question.trim()) return;
+    if (!question.trim() || loading) return;
     setMessages((m) => [...m, { role: "user", text: question }]);
     setInput("");
     setLoading(true);
     try {
-      const resp = await api.post<{ answer: string; tools_called: string[]; flagged: boolean; blocked: boolean }>("/agent/ask", { question });
-      setMessages((m) => [...m, { role: "munshi", text: resp.answer, blocked: resp.blocked, toolsCalled: resp.tools_called }]);
+      const r = await api.post<{
+        answer: string;
+        tools_called: string[];
+        flagged: boolean;
+        blocked: boolean;
+      }>("/agent/ask", { question });
+      setMessages((m) => [
+        ...m,
+        {
+          role: "munshi",
+          text: r.answer,
+          blocked: r.blocked,
+          flagged: r.flagged,
+          tools: r.tools_called,
+        },
+      ]);
     } catch {
-      setMessages((m) => [...m, { role: "munshi", text: "Something went wrong. Please try again.", blocked: false }]);
+      setMessages((m) => [...m, { role: "munshi", text: t("loadFailed") }]);
     } finally {
       setLoading(false);
     }
   }
-
   return (
-    <div className="flex h-[70vh] flex-col">
-      <h1 className="text-2xl font-bold">{t("munshi")}</h1>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button key={s} onClick={() => ask(s)} className="rounded-full border border-black/10 px-3 py-1 text-xs dark:border-white/20">
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-4 flex-1 space-y-3 overflow-y-auto rounded-lg border border-black/10 p-4 dark:border-white/10">
-        {messages.length === 0 && <p className="text-sm text-black/50 dark:text-white/50">{t("noData")}</p>}
-        {messages.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "text-right" : ""}>
-            <div
-              className={`inline-block max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                m.role === "user"
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : m.blocked
-                    ? "border border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
-                    : "border border-black/10 dark:border-white/10"
-              }`}
-            >
-              {m.text}
-            </div>
-            {m.toolsCalled && m.toolsCalled.length > 0 && (
-              <p className="mt-1 text-xs text-black/40 dark:text-white/40">tools used: {m.toolsCalled.join(", ")}</p>
+    <>
+      <Heading title={t("munshi")} description={t("munshiSubtitle")} />
+      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+        <aside className="panel h-fit !bg-[#e8f3ef]">
+          <span className="pill">{t("auditNote")}</span>
+          <h2 className="mt-5 text-xl font-semibold">{t("munshiWelcome")}</h2>
+          <p className="muted mt-3 text-sm leading-relaxed">
+            {t("munshiNote")}
+          </p>
+          <div className="mt-6 space-y-3">
+            {["questionReorder", "questionCredit", "questionProfit"].map(
+              (k, i) => (
+                <button
+                  key={k}
+                  onClick={() =>
+                    ask(
+                      lang === "ur"
+                        ? [
+                            "is haftay kya order karna chahiye?",
+                            "kis ka udhaar sab se purana hai?",
+                            "pichlay mahinay ka profit summary batao",
+                          ][i]
+                        : t(
+                            k as
+                              | "questionReorder"
+                              | "questionCredit"
+                              | "questionProfit",
+                          ),
+                    )
+                  }
+                  disabled={loading}
+                  className="button-secondary w-full !justify-start text-start leading-relaxed"
+                >
+                  {t(
+                    k as
+                      | "questionReorder"
+                      | "questionCredit"
+                      | "questionProfit",
+                  )}
+                </button>
+              ),
             )}
           </div>
-        ))}
-        {loading && <p className="text-sm text-black/50">{t("loading")}</p>}
+        </aside>
+        <section className="panel flex min-h-[60dvh] flex-col">
+          <div
+            role="log"
+            aria-live="polite"
+            className="flex max-h-[55dvh] flex-1 flex-col gap-5 overflow-y-auto pb-6"
+          >
+            {messages.length === 0 && (
+              <div className="m-auto max-w-sm py-16 text-center">
+                <p className="eyebrow">{t("munshi")}</p>
+                <p className="mt-4 text-xl font-semibold">
+                  {t("munshiWelcome")}
+                </p>
+                <p className="muted mt-3 text-sm">{t("munshiNote")}</p>
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                className={
+                  m.role === "user" ? "ms-auto max-w-[90%]" : "max-w-[95%]"
+                }
+              >
+                <p className="muted mb-2 text-xs">
+                  {m.role === "munshi" ? t("munshi") : t("name")}
+                </p>
+                <div
+                  className={`whitespace-pre-wrap rounded-xl p-4 text-sm leading-relaxed ${m.role === "user" ? "bg-[#102f3a] text-white" : m.blocked ? "border border-red-200 bg-red-50 text-red-800" : "border border-slate-200 bg-slate-50"}`}
+                >
+                  {m.text}
+                </div>
+                {m.blocked && (
+                  <span className="pill pill-warning mt-2">{t("blocked")}</span>
+                )}
+                {m.flagged && (
+                  <span className="pill pill-warning mt-2">
+                    {t("humanReview")}
+                  </span>
+                )}
+                {!!m.tools?.length && (
+                  <p className="muted mt-2 text-xs">
+                    {t("evidence")}:{" "}
+                    <span className="number">{m.tools.join(", ")}</span>
+                  </p>
+                )}
+              </div>
+            ))}
+            {loading && (
+              <p role="status" className="muted text-sm">
+                {t("thinking")}
+              </p>
+            )}
+            <div ref={bottom} />
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void ask(input);
+            }}
+            className="flex items-end gap-3 border-t border-slate-200 pt-4"
+          >
+            <div className="min-w-0 flex-1">
+              <Field label={t("askMunshi")}>
+                <textarea
+                  rows={2}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  required
+                  maxLength={2000}
+                />
+              </Field>
+            </div>
+            <button
+              disabled={loading || !input.trim()}
+              className="button-primary"
+              type="submit"
+            >
+              {t("send")}
+            </button>
+          </form>
+        </section>
       </div>
-
-      <form
-        onSubmit={(e) => { e.preventDefault(); ask(input); }}
-        className="mt-3 flex gap-2"
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={t("askMunshi")}
-          className="flex-1 rounded-lg border border-black/10 px-3 py-2 dark:border-white/20"
-        />
-        <button type="submit" disabled={loading} className="rounded-full bg-black px-4 py-2 text-white disabled:opacity-50 dark:bg-white dark:text-black">
-          {t("send")}
-        </button>
-      </form>
-    </div>
+    </>
   );
 }
-
-export default function MunshiPage() {
+export default function Page() {
   return (
     <RequireAuth>
-      <MunshiContent />
+      <Suspense>
+        <Content />
+      </Suspense>
     </RequireAuth>
   );
 }

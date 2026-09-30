@@ -22,6 +22,9 @@ is what makes the service layer independently testable (see
 truth is the full `StockMovement` history. Every purchase/sale order
 writes a movement row AND updates the cache in the same transaction
 (`app/services/order_service.py` -> `app/services/stock_service.py`).
+Orders validate eligible parties, positive quantities, nonnegative prices and available stock before posting. Product rows are locked in a stable order on PostgreSQL; concurrency still needs production-database verification.
+
+When `ledger_method` is supplied, the same transaction posts the party invoice and any immediate settlement. Credit sales debit customer khata; credit purchases credit supplier khata. Paying a supplier debits their balance. Legacy callers omitting this field retain separate ledger posting.
 A repair endpoint (`POST /products/{id}/recompute-stock`) recomputes the
 cache from scratch if it ever drifts - tested in
 `test_stock_service.py::test_recompute_current_stock_matches_movement_sum`.
@@ -37,8 +40,8 @@ balance = party.opening_balance + sum(debits) - sum(credits)
 ```
 
 Aging (`app/services/ledger_service.py::get_receivables_aging`) does a
-proper FIFO match: every credit is applied against the OLDEST outstanding
-debit first, then each debit's remaining unpaid amount is bucketed by its
+proper invoice-aware FIFO match: referenced settlement credits pay their
+own invoice first; general receipts pay the OLDEST outstanding debit first, then each debit's remaining unpaid amount is bucketed by its
 age (current / 30 / 60 / 90+). This is real accounts-receivable aging,
 not a balance-minus-recent-payments approximation.
 
@@ -83,3 +86,7 @@ standalone MCP server later without a rewrite.
   AND the presence of correct numbers in the answer. Runs entirely
   offline (`OPENAI_API_KEY=""` forced in `conftest.py`) so CI never
   needs a real API key or makes a real network call.
+
+## Web performance
+
+The khata overview uses `/ledger/balances`, with two database reads for parties and entries. It reuses the FIFO aging calculation used by individual statements. Search is debounced and stale responses are ignored; auth redirects wait for saved-session hydration. Shared catalog and order components keep purchase/sale and party/product behavior consistent.

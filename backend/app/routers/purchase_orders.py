@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
+from app.models.user import User
 from app.models.purchase_order import PurchaseOrder
 from app.schemas.order import OrderCreate, OrderOut, OrderStatusUpdate
 from app.services import order_service
@@ -21,15 +22,21 @@ def list_purchase_orders(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
-def create_purchase_order(payload: OrderCreate, db: Session = Depends(get_db)):
+def create_purchase_order(payload: OrderCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not payload.items:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "An order needs at least one item")
-    order = order_service.create_purchase_order(
-        db,
-        party_id=payload.party_id,
-        order_date=payload.date,
-        items=[item.model_dump() for item in payload.items],
-    )
+    try:
+        order = order_service.create_purchase_order(
+            db,
+            party_id=payload.party_id,
+            order_date=payload.date,
+            items=[item.model_dump() for item in payload.items],
+            ledger_method=payload.ledger_method,
+            created_by=user.id,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     db.commit()
     db.refresh(order)
     return order

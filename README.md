@@ -1,210 +1,85 @@
-# TradeFlow
+# AI TradeFlow
 
-AI-powered inventory & accounting platform for Pakistan's wholesalers -
-Portfolio Project 1 of the "AI for Pakistan Trade" series.
+A bilingual inventory and khata workspace for Pakistani wholesalers, with a read-only assistant, **Munshi AI**, grounded in the business's own records.
 
-Built per [`SPEC-TRADEFLOW.md`](SPEC-TRADEFLOW.md) - a bilingual
-(Urdu + English), mobile-first system with a real digital FTE, **Munshi
-AI**, that reads the business's own data and answers questions like
-*"is haftay kya order karna chahiye?"* with grounded, cited recommendations.
+**Status: polished local MVP.** The web demo is functional; public production deployment and business isolation remain launch gates. See [completion criteria](docs/COMPLETION-PLAN.md).
+
+## A trading day, in focus
+
+- **Act on the dashboard:** follow up on receivables, open a replenishment order from a stock alert, or prepare a reorder question for Munshi.
+- **Post once:** receiving stock or recording a sale posts stock and khata together. Credit remains outstanding; cash, bank and wallet payments settle the invoice.
+- **Keep khata clear:** search customers and suppliers, filter receivables/payables, inspect aging, record payments and export PDF or WhatsApp-ready text.
+- **Work in English or Urdu:** responsive screens, RTL layout, labeled forms, keyboard focus and readable currency values.
+- **Ask with context:** Munshi exposes tool sources and block/flag states, with a deterministic offline fallback when a model key is absent.
 
 ## Screenshots
 
-<!--
-  Drag your screenshots into docs/screenshots/ using the filenames below
-  and they'll show up here automatically - see docs/screenshots/README.md
-  for exactly what to capture. No markdown editing needed.
--->
+Actual local-demo screenshots, captured from the production frontend build. The mobile screenshot shows the Urdu **web** interface, not the native Expo companion.
 
-| Dashboard | Khata (Ledger) |
+| Dashboard | Khata |
 |---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Khata](docs/screenshots/khata.png) |
+| ![Daily action dashboard](docs/screenshots/dashboard.png) | ![Party balances](docs/screenshots/khata.png) |
 
-| Munshi AI | Mobile |
+| Munshi AI | Urdu mobile web |
 |---|---|
-| ![Munshi AI](docs/screenshots/munshi.png) | ![Mobile app](docs/screenshots/mobile.png) |
+| ![Grounded assistant](docs/screenshots/munshi.png) | ![Urdu responsive web](docs/screenshots/mobile-web.png) |
 
 ## Stack
 
-| Layer | Choice |
+| Layer | Technology |
 |---|---|
-| Frontend | Next.js (App Router) + Tailwind + Zustand |
-| Backend | FastAPI + SQLAlchemy |
-| Database | SQLite (dev) / PostgreSQL (prod) |
-| Agent | OpenAI Agents SDK, 5 read-only MCP-style tools |
-| i18n | Custom React context (Urdu + English, RTL) |
-| Deployment | Vercel (frontend) + Railway/Docker (backend) |
+| Web | Next.js 16 App Router, React, Tailwind, Zustand |
+| API | FastAPI, SQLAlchemy, Alembic |
+| Database | SQLite locally; PostgreSQL deployment support |
+| Assistant | OpenAI Agents SDK with five in-process read-only tools; no standalone MCP transport |
+| Languages | English and Urdu with RTL |
+| Companion | Expo Router app; dashboard, khata and Munshi scope |
 
-## Quick start
+## Run locally
 
-**Backend:**
+Use Python 3.12 and Node 24. From the repository root:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r backend/requirements.txt
 cd backend
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate      # macOS/Linux
-pip install -r requirements.txt
-copy .env.example .env          # cp on macOS/Linux - sqlite works out of the box
-python seed.py                    # realistic 90-day demo dataset
+cp .env.example .env            # Windows: copy .env.example .env
+python seed.py                  # WARNING: replaces the configured database
 uvicorn app.main:app --reload --port 8000
 ```
 
-**Database migrations** (Alembic - only needed once you point `DATABASE_URL`
-at a real Postgres instance; SQLite dev mode auto-creates tables on startup):
-
-```bash
-cd backend
-alembic upgrade head          # applies backend/alembic/versions/*
-alembic revision --autogenerate -m "describe your model change"   # after editing a model
-```
-
-The Docker/Railway startup command runs `alembic upgrade head`
-automatically before starting the server.
-
-**Frontend** (separate terminal):
+In another terminal:
 
 ```bash
 cd frontend
-npm install
-copy .env.example .env.local      # cp on macOS/Linux
+npm ci
+cp .env.example .env.local      # Windows: copy .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000, log in with the seeded demo account:
+Open http://localhost:3000. Choose **Use demo account**, then Login. Seed credentials: `03000000000` / `tradeflow123`. Only run `seed.py` against a disposable demo database. The seeded catalog contains 20 products, 20 parties and 90 days of synthetic transactions.
 
-```
-Phone:    03000000000
-Password: tradeflow123
-```
+For the Expo companion, follow [mobile/README.md](mobile/README.md). Native mobile was not part of the web polish verification.
 
-**Mobile** (optional, separate terminal - v1.1, see `mobile/README.md`):
+## Verify
 
 ```bash
-cd mobile
-npm install
-cp .env.example .env
-npx expo start          # scan the QR code with Expo Go, or press w for web
+# activated Python environment, from backend/
+pytest -q
+
+# from frontend/
+npm run lint
+npm run build
+npm audit
 ```
 
-**Tests:**
+The polish milestone passes **105 backend tests**, frontend lint and production build, with **zero npm audit vulnerabilities** in the installed dependency tree. Browser checks cover protected-page refresh, the web trading workflows and English/Urdu responsive layouts. See [verification notes](docs/POLISH-VERIFICATION.md) for scope and limits.
 
-```bash
-cd backend
-pytest -q          # 90 tests: unit, integration, and agent golden-questions
-```
+## Deployment and scope
 
-## What's actually here
+The repository includes Docker, Compose, Railway and Alembic configuration. These are configuration files, not evidence of a live deployment. Apply `alembic upgrade head` when preparing PostgreSQL, configure `DATABASE_URL`, a strong `JWT_SECRET`, `FRONTEND_ORIGIN`, and the frontend's build-time `NEXT_PUBLIC_API_URL`. Set `OPENAI_API_KEY` only when enabling model-backed narration; the core workspace runs without it.
 
-- **Full inventory & accounting**: bilingual party/product CRUD, purchase
-  and sale orders with automatic stock movements, a khata (ledger) with
-  proper FIFO udhaar aging, a live dashboard.
-- **Munshi AI**: a real OpenAI Agents SDK agent with 5 read-only tools,
-  a deterministic constitutional guardrail (BLOCK/FLAG patterns) that runs
-  *before* any LLM call, and a graceful offline fallback so the feature
-  never hard-crashes if the model API has a bad moment.
-- **WhatsApp-ready reports**: daily summary and party statement, as text
-  and PDF.
-- **90 real tests** covering invariants (stock, balance, aging edges),
-  the full trade cycle end to end through the HTTP API, and the three
-  flagship Munshi AI questions with tool-citation assertions.
-- **Mobile app (v1.1)**: an Expo Router companion covering the
-  on-the-go slice - dashboard, khata, Munshi AI chat - against the same
-  backend. See `mobile/README.md` for scope and setup.
+Tenant columns are currently not enforced, monetary model fields remain floating point, historical profit uses current product cost, and partial fulfilment is not complete. Treat the demo as a single-business development environment until the [launch gates](docs/COMPLETION-PLAN.md) are resolved.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how the pieces fit
-together, and `SESSION-1-SUMMARY.md` through `SESSION-5-SUMMARY.md` for
-what was built and verified in each phase (Sessions 1-4 = the original
-spec; Session 5 = the first post-v1 roadmap item, §12).
-
-## Known deviations from the spec (disclosed, not hidden)
-
-- **`masala-store` reuse source unavailable** - the bilingual/RTL UI was
-  built fresh instead of ported (see `SPEC-TRADEFLOW.md`'s execution note).
-- **Next.js version**: the spec named Next.js 14; the frontend actually
-  runs Next.js 16 (same App Router model, newer release) - a disclosed
-  substitution, not a silent one.
-- **Product catalog is ~20 items, not ~40** - a deliberate scope trim
-  given the time available; still spans 5 categories with 90 days of
-  transaction history, enough to exercise every feature meaningfully.
-- **Live cloud deployment**: this README documents the deploy path and
-  ships ready-to-use configs (`railway.json`, `Dockerfile`,
-  `docker-compose.yml`), but provisioning actual Railway/Vercel
-  infrastructure with real credentials wasn't done as part of this build -
-  see "Deploying" below for the exact steps to finish that yourself.
-
-## 🧭 Agentic AI Alignment
-
-Munshi AI is a real, bounded agent, not a wrapper around a chat model:
-- **Autonomy** — it reads the business's own inventory/ledger data through 5
-  read-only tools and answers questions like *"is haftay kya order karna
-  chahiye?"* on its own, citing the data it used.
-- **Resilience** — a deterministic constitutional guardrail (BLOCK/FLAG
-  patterns) runs *before* any LLM call, and a graceful offline fallback
-  means the feature never hard-crashes if the model API has a bad moment.
-- **Adaptivity** — the same agent operates bilingually (Urdu + English) and
-  is exercised by golden-question tests with tool-citation assertions, so
-  its answers stay grounded as the underlying data changes.
-
-## 📈 Roadmap
-Tracked from the disclosed gaps above and `SESSION-5-SUMMARY.md` (§12):
-- [ ] Provision live Railway/Vercel infrastructure with real credentials
-- [ ] Grow the product catalog from ~20 items back toward the ~40 in the spec
-- [ ] Finish porting the mobile app's remaining screens beyond dashboard/khata/Munshi AI chat
-
-## 👨‍💻 Author
-Built by **Asadullah Shafique** — Portfolio Project 1 of the "AI for
-Pakistan Trade" series.
-
-🔗 [asadullahshafique-devunity.vercel.app](https://asadullahshafique-devunity.vercel.app)
-
-## Deploying
-
-**Frontend (Vercel):**
-
-```bash
-cd frontend
-vercel --prod
-# then set NEXT_PUBLIC_API_URL to your deployed backend URL in the Vercel dashboard
-```
-
-**Backend (Railway):**
-
-```bash
-cd backend
-railway init
-railway up
-# Add a Postgres plugin in the Railway dashboard - DATABASE_URL is injected automatically
-# Set JWT_SECRET and OPENAI_API_KEY in the Railway dashboard's variables tab
-```
-
-**Or self-host both with Docker:**
-
-```bash
-docker compose up --build
-```
-
-## Project structure
-
-```
-tradeflow/
-├── SPEC-TRADEFLOW.md          <- the spec this was built from
-├── SESSION-1-SUMMARY.md ... SESSION-4-SUMMARY.md
-├── docs/ARCHITECTURE.md
-├── backend/
-│   ├── app/
-│   │   ├── models/              <- SQLAlchemy models
-│   │   ├── schemas/               <- Pydantic request/response shapes
-│   │   ├── routers/                <- FastAPI endpoints
-│   │   ├── services/                 <- business logic (stock, ledger, velocity, profit)
-│   │   ├── agent/                      <- Munshi AI: constitution, tools, SKILL.md
-│   │   └── auth/                         <- JWT + password hashing
-│   ├── tests/                           <- 90 tests
-│   └── seed.py                            <- demo dataset generator
-├── frontend/
-│   └── app/                                <- Next.js App Router pages
-├── mobile/
-│   ├── app/                                  <- Expo Router screens
-│   └── eas.json                                <- EAS build profiles
-└── docker-compose.yml
-```
+See [architecture](docs/ARCHITECTURE.md), [original spec](SPEC-TRADEFLOW.md), and the session summaries for implementation history. Historical summaries describe their original milestone, not the current verification result.
