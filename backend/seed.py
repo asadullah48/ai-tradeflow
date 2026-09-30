@@ -95,8 +95,8 @@ def seed():
     # Initial stock-up: every product gets an opening purchase.
     for product in products:
         supplier = random.choice(suppliers)
-        qty = random.randint(200, 600)
-        order_service.create_purchase_order(db, party_id=supplier.id, order_date=start, items=[{"product_id": product.id, "qty": qty, "unit_price": product.cost_price}])
+        qty = random.randint(30, 120)
+        order_service.create_purchase_order(db, party_id=supplier.id, order_date=start, items=[{"product_id": product.id, "qty": qty, "unit_price": product.cost_price}], ledger_method=random.choice(["bank", "bank", "udhaar"]), created_by=owner.id)
 
     # 90 days of sales activity - fast movers sell often, some products barely move (dead stock).
     fast_movers = random.sample(products, 6)
@@ -107,13 +107,19 @@ def seed():
             customer = random.choice(customers)
             chosen_products = random.sample(fast_movers, k=random.randint(1, 2)) if random.random() < 0.6 else random.sample(products, k=1)
             items = [{"product_id": p.id, "qty": random.randint(1, 8), "unit_price": p.sale_price} for p in chosen_products]
-            sale = order_service.create_sale_order(db, party_id=customer.id, order_date=order_date, items=items)
+            # Replenish before a sale; never invent negative stock in demo data.
+            for item in items:
+                product = next(p for p in products if p.id == item["product_id"])
+                if product.current_stock < item["qty"]:
+                    order_service.create_purchase_order(db, party_id=random.choice(suppliers).id,
+                        order_date=order_date, items=[{"product_id": product.id, "qty": 200,
+                        "unit_price": product.cost_price}], ledger_method="udhaar", created_by=owner.id)
+            on_credit = random.random() < 0.4
+            sale = order_service.create_sale_order(db, party_id=customer.id, order_date=order_date,
+                items=items, ledger_method="udhaar" if on_credit else "cash", created_by=owner.id)
 
-            # ~40% of sales go on udhaar (credit) and hit the khata; the
-            # rest are paid on the spot in cash and never touch the ledger
-            # at all - that's the real-world meaning of a khata register.
-            if random.random() < 0.4:
-                ledger_service.record_entry(db, party_id=customer.id, entry_date=order_date, entry_type="debit", amount=sale.total, method="udhaar", ref_order_id=sale.id, created_by=owner.id)
+            # Cash settles immediately; credit invoices remain outstanding.
+            if on_credit:
                 # Some udhaar gets partially paid back later.
                 if random.random() < 0.5:
                     payment_date = min(order_date + timedelta(days=random.randint(5, 60)), today)
@@ -123,7 +129,7 @@ def seed():
     for product in fast_movers:
         supplier = random.choice(suppliers)
         restock_date = start + timedelta(days=random.randint(30, 60))
-        order_service.create_purchase_order(db, party_id=supplier.id, order_date=restock_date, items=[{"product_id": product.id, "qty": random.randint(100, 300), "unit_price": product.cost_price}])
+        order_service.create_purchase_order(db, party_id=supplier.id, order_date=restock_date, items=[{"product_id": product.id, "qty": random.randint(100, 300), "unit_price": product.cost_price}], ledger_method="bank", created_by=owner.id)
 
     db.commit()
     db.close()

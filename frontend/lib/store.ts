@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -20,6 +21,14 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (token, user) => set({ token, user }),
       clearAuth: () => set({ token: null, user: null }),
     }),
-    { name: "tradeflow-auth" }
-  )
+    { name: "tradeflow-auth" },
+  ),
 );
+
+function subscribeHydration(callback: () => void) {
+  return useAuthStore.persist.onFinishHydration(callback);
+}
+export function useAuthHydrated() {
+  return useSyncExternalStore(subscribeHydration,
+    () => useAuthStore.persist.hasHydrated(), () => false);
+}

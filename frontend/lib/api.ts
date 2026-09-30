@@ -18,7 +18,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+      signal: options.signal ?? controller.signal,
+    });
+  } catch {
+    throw new ApiError(0, "Connection unavailable. Please try again.");
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (res.status === 401) {
     useAuthStore.getState().clearAuth();
@@ -28,7 +41,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail =
+        typeof body.detail === "string"
+          ? body.detail
+          : "Please check the entered values.";
     } catch {
       // response wasn't JSON - keep statusText
     }
@@ -41,8 +57,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
+  post: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 

@@ -30,6 +30,10 @@ def record_entry(
     note: str | None = None,
     created_by: str | None = None,
 ) -> LedgerEntry:
+    if db.get(Party, party_id) is None:
+        raise ValueError("Party not found")
+    if entry_type not in {"debit", "credit"}:
+        raise ValueError("Invalid ledger entry type")
     if amount <= 0:
         raise ValueError("Ledger entry amount must be positive")
     if method == "udhaar" and ref_order_id is None:
@@ -70,6 +74,7 @@ class AgedDebit:
     entry_id: str
     date: date_type
     remaining: float
+    ref_order_id: str | None = None
 
 
 def _bucket_for_age(days: int) -> str:
@@ -91,14 +96,27 @@ def get_receivables_aging(db: Session, party_id: str, as_of: date_type | None = 
         select(LedgerEntry).where(LedgerEntry.party_id == party_id)
     ).scalars().all()
 
+    return _age_entries(entries, as_of)
+
+
+def _age_entries(entries, as_of):
     debits = sorted(
-        [AgedDebit(e.id, e.date, e.amount) for e in entries if e.type == "debit"],
+        [AgedDebit(e.id, e.date, e.amount, e.ref_order_id) for e in entries if e.type == "debit"],
         key=lambda d: d.date,
     )
-    credits_total = sum(e.amount for e in entries if e.type == "credit")
-
-    # Apply all credits FIFO against the oldest debits.
-    remaining_credit = credits_total
+    # Settle explicitly linked invoices first. Otherwise a cash sale could
+    # incorrectly rejuvenate an older unpaid credit invoice through FIFO.
+    remaining_credit = 0.0
+    for credit in (e for e in entries if e.type == "credit"):
+        unallocated = credit.amount
+        if credit.ref_order_id:
+            for debit in debits:
+                if debit.ref_order_id == credit.ref_order_id:
+                    applied = min(debit.remaining, unallocated)
+                    debit.remaining -= applied
+                    unallocated -= applied
+        remaining_credit += unallocated
+    # General receipts and any surplus still apply FIFO to outstanding debt.
     for debit in debits:
         if remaining_credit <= 0:
             break
@@ -114,3 +132,21 @@ def get_receivables_aging(db: Session, party_id: str, as_of: date_type | None = 
         buckets[_bucket_for_age(age_days)] += debit.remaining
 
     return buckets
+
+
+def get_all_balances(db: Session) -> list[dict]:
+    """Build the overview with two queries, independent of party count."""
+    from collections import defaultdict
+    parties = db.query(Party).order_by(Party.name).all()
+    grouped = defaultdict(list)
+    for entry in db.query(LedgerEntry).all():
+        grouped[entry.party_id].append(entry)
+    result = []
+    for party in parties:
+        entries = grouped[party.id]
+        balance = party.opening_balance + sum(e.amount if e.type == "debit" else -e.amount for e in entries)
+        result.append({"party_id": party.id, "party_name": party.name,
+            "balance": round(balance, 2), "aging": [
+                {"label": label, "amount": round(amount, 2)}
+                for label, amount in _age_entries(entries, date_type.today()).items()]})
+    return result

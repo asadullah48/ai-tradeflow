@@ -1,71 +1,134 @@
 "use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
 import RequireAuth from "@/components/RequireAuth";
-import { api } from "@/lib/api";
+import { Heading, Notice, Loading, Empty } from "@/components/Workspace";
+import { useResource } from "@/lib/use-resource";
 import { useI18n } from "@/lib/i18n";
-
-type Party = { id: string; name: string; type: string };
-type Balance = { party_id: string; party_name: string; balance: number; aging: { label: string; amount: number }[] };
-
-function KhataContent() {
+import { money } from "@/lib/format";
+type Balance = {
+  party_id: string;
+  party_name: string;
+  balance: number;
+  aging: { label: string; amount: number }[];
+};
+function Content() {
   const { t } = useI18n();
-  const [parties, setParties] = useState<Party[]>([]);
-  const [balances, setBalances] = useState<Record<string, Balance>>({});
-
-  useEffect(() => {
-    api.get<Party[]>("/parties").then(async (list) => {
-      setParties(list);
-      const entries = await Promise.all(
-        list.map(async (p) => [p.id, await api.get<Balance>(`/ledger/parties/${p.id}/balance`)] as const)
-      );
-      setBalances(Object.fromEntries(entries));
-    });
-  }, []);
-
+  const { data, error, loading, reload } =
+    useResource<Balance[]>("/ledger/balances");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const rows = (data ?? [])
+    .filter(
+      (p) =>
+        p.party_name.toLocaleLowerCase().includes(query.toLocaleLowerCase()) &&
+        (filter === "all" ||
+          (filter === "receivable" && p.balance > 0) ||
+          (filter === "payable" && p.balance < 0)),
+    )
+    .sort(
+      (a, b) =>
+        (b.aging.find((i) => i.label === "90+")?.amount ?? 0) -
+        (a.aging.find((i) => i.label === "90+")?.amount ?? 0),
+    );
   return (
-    <div>
-      <h1 className="text-2xl font-bold">{t("khata")}</h1>
-
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-black/10 text-left dark:border-white/10">
-              <th className="py-2">{t("party")}</th>
-              <th>{t("balance")}</th>
-              <th>90+ days</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {parties.map((p) => {
-              const balance = balances[p.id];
-              const overdue = balance?.aging.find((a) => a.label === "90+")?.amount ?? 0;
-              return (
-                <tr key={p.id} className="border-b border-black/5 dark:border-white/10">
-                  <td className="py-2">{p.name}</td>
-                  <td className={balance?.balance > 0 ? "text-green-700 dark:text-green-400" : balance?.balance < 0 ? "text-red-600 dark:text-red-400" : ""}>
-                    {balance ? `Rs ${balance.balance.toLocaleString()}` : "..."}
+    <>
+      <Heading title={t("khata")} description={t("khataSubtitle")} />
+      {error && (
+        <Notice>
+          {t("loadFailed")}{" "}
+          <button onClick={reload} className="underline">
+            {t("retry")}
+          </button>
+        </Notice>
+      )}
+      <div className="mb-5 flex flex-wrap gap-3">
+        <label className="w-full sm:max-w-sm">
+          <span className="sr-only">{t("search")}</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("search")}
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {["all", "receivable", "payable"].map((k) => (
+            <button
+              key={k}
+              className={filter === k ? "button-primary" : "button-secondary"}
+              onClick={() => setFilter(k)}
+              aria-pressed={filter === k}
+            >
+              {t(k === "all" ? "allParties" : (k as "receivable" | "payable"))}
+            </button>
+          ))}
+        </div>
+      </div>
+      {loading && !data ? (
+        <Loading />
+      ) : rows.length ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{t("party")}</th>
+                <th>{t("balance")}</th>
+                <th>{t("status")}</th>
+                <th>{t("overdue")}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.party_id}>
+                  <td className="font-medium">{p.party_name}</td>
+                  <td className="number font-semibold">
+                    {money(Math.abs(p.balance))}
                   </td>
-                  <td className={overdue > 0 ? "text-red-600 dark:text-red-400" : ""}>{overdue > 0 ? `Rs ${overdue.toLocaleString()}` : "-"}</td>
                   <td>
-                    <Link href={`/khata/${p.id}`} className="text-blue-600 hover:underline dark:text-blue-400">View</Link>
+                    <span
+                      className={`pill ${p.balance < 0 ? "pill-warning" : ""}`}
+                    >
+                      {t(
+                        p.balance > 0
+                          ? "receivable"
+                          : p.balance < 0
+                            ? "payable"
+                            : "settled",
+                      )}
+                    </span>
+                  </td>
+                  <td className="number text-amber-800">
+                    {money(p.aging.find((a) => a.label === "90+")?.amount ?? 0)}
+                  </td>
+                  <td>
+                    <Link
+                      href={`/khata/${p.party_id}`}
+                      className="font-medium text-teal-700 underline"
+                    >
+                      {t("view")}
+                    </Link>
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <Empty title={t("noData")}>
+          <Link href="/parties" className="button-secondary mt-3">
+            {t("newParty")}
+          </Link>
+        </Empty>
+      )}
+    </>
   );
 }
-
-export default function KhataPage() {
+export default function Page() {
   return (
     <RequireAuth>
-      <KhataContent />
+      <Content />
     </RequireAuth>
   );
 }

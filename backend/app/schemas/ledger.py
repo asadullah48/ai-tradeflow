@@ -1,15 +1,16 @@
 from datetime import date
 
-from pydantic import BaseModel
+from typing import Literal
+from pydantic import BaseModel, Field
 
 
 class LedgerEntryCreate(BaseModel):
     party_id: str
     date: date
-    type: str  # "debit" | "credit"
-    amount: float
+    type: Literal["debit", "credit"]
+    amount: float = Field(gt=0, allow_inf_nan=False)
     ref_order_id: str | None = None
-    method: str = "cash"
+    method: Literal["cash", "bank", "jazzcash", "easypaisa", "udhaar"] = "cash"
     note: str | None = None
 
 

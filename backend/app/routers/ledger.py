@@ -52,3 +52,8 @@ def party_balance(party_id: str, db: Session = Depends(get_db)):
         balance=round(balance, 2),
         aging=[AgingBucket(label=label, amount=round(amount, 2)) for label, amount in aging.items()],
     )
+
+
+@router.get("/balances", response_model=list[PartyBalance])
+def balances(db: Session = Depends(get_db)):
+    return ledger_service.get_all_balances(db)
