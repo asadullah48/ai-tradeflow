@@ -135,6 +135,11 @@ function DashboardContent() {
                     ) : (
                       <p className="muted py-3 text-sm">{t("noReceivables")}</p>
                     )}
+                    {data.top_udhaar_exposure.length > 0 && (
+                      <Link href="/collections" className="mt-2 inline-block text-xs text-teal-700 underline">
+                        {t("collections")} →
+                      </Link>
+                    )}
                   </div>
                   <div>
                     <p className="eyebrow mb-3">02 / {t("restockNext")}</p>

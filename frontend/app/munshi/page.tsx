@@ -118,7 +118,7 @@ function Content() {
                 }
               >
                 <p className="muted mb-2 text-xs">
-                  {m.role === "munshi" ? t("munshi") : t("name")}
+                  {m.role === "munshi" ? t("munshi") : t("you")}
                 </p>
                 <div
                   className={`whitespace-pre-wrap rounded-xl p-4 text-sm leading-relaxed ${m.role === "user" ? "bg-[#102f3a] text-white" : m.blocked ? "border border-red-200 bg-red-50 text-red-800" : "border border-slate-200 bg-slate-50"}`}

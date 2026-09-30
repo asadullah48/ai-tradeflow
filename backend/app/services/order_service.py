@@ -107,7 +107,7 @@ def create_sale_order(
         if balance + total > party.credit_limit + 0.005:
             if not override_credit_limit:
                 raise CreditLimitExceeded(party.name, balance, total, party.credit_limit)
-            override_note = f"Credit limit override approved (limit Rs {party.credit_limit:,.0f}, balance before Rs {balance:,.0f})"
+            override_note = f"Sale invoice - credit limit override approved (limit Rs {party.credit_limit:,.0f}, balance before Rs {balance:,.0f})"
 
     order = SaleOrder(party_id=party_id, date=order_date, status="draft", total=0.0,
                       created_by=created_by, idempotency_key=idempotency_key)

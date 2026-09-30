@@ -209,3 +209,8 @@ tbody tr:hover {
     box-shadow: none;
   }
 }
+/* The public landing page is full-bleed; workspace pages keep the padded frame. */
+.app-main:has(> .landing) {
+  max-width: none;
+  padding: 0;
+}

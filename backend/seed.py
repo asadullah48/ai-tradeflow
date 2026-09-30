@@ -111,7 +111,7 @@ def seed():
 
     # 90 days of sales activity - fast movers sell often, some products barely move (dead stock).
     fast_movers = random.sample(products, 6)
-    for day_offset in range(90):
+    for day_offset in range(91):  # 90 days back through today
         order_date = start + timedelta(days=day_offset)
         num_sales = random.randint(1, 4)
         for _ in range(num_sales):
@@ -140,8 +140,9 @@ def seed():
             # Cash settles immediately; credit invoices remain outstanding.
             if on_credit:
                 # Some udhaar gets partially paid back later.
-                if random.random() < 0.5:
-                    payment_date = min(order_date + timedelta(days=random.randint(5, 60)), today)
+                payment_date = order_date + timedelta(days=random.randint(5, 60))
+                # A payment due after today simply hasn't happened yet.
+                if random.random() < 0.5 and payment_date <= today:
                     ledger_service.record_entry(db, party_id=customer.id, entry_date=payment_date, entry_type="credit", amount=round(sale.total * random.uniform(0.3, 1.0), 2), method=random.choice(["cash", "bank", "jazzcash", "easypaisa"]), created_by=owner.id)
 
     # A couple of restocks partway through, for the fast movers.

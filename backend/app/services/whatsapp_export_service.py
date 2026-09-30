@@ -103,6 +103,7 @@ def build_party_statement_pdf(db: Session, *, party_id: str, business_name: str 
     ]))
     story += [aging_table, Spacer(1, 6 * mm)]
 
+    cell = styles["Normal"].clone("cell", fontSize=8.5, leading=10.5)
     running = party.opening_balance
     rows = [["Date", "Details", "Debit", "Credit", "Balance"]]
     if party.opening_balance:
@@ -110,7 +111,7 @@ def build_party_statement_pdf(db: Session, *, party_id: str, business_name: str 
     for e in entries:
         running += e.amount if e.type == "debit" else -e.amount
         rows.append([
-            e.date.isoformat(), f"{(e.note or '').strip() or e.method} ({e.method})"[:60],
+            e.date.isoformat(), Paragraph(_esc(_details(e)), cell),
             f"{e.amount:,.2f}" if e.type == "debit" else "",
             f"{e.amount:,.2f}" if e.type == "credit" else "",
             f"{running:,.2f}",
@@ -120,6 +121,7 @@ def build_party_statement_pdf(db: Session, *, party_id: str, business_name: str 
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 8.5),
         ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.HexColor("#102f3a")),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
     ]))
@@ -128,6 +130,12 @@ def build_party_statement_pdf(db: Session, *, party_id: str, business_name: str 
     doc.build(story)
     buffer.seek(0)
     return buffer.read()
+
+
+def _details(entry: LedgerEntry) -> str:
+    note = (entry.note or "").strip() or "Entry"
+    # Invoice lines are always "udhaar"; the method only informs payments.
+    return note if entry.method == "udhaar" else f"{note} ({entry.method})"
 
 
 def _esc(value: str) -> str:

@@ -1,31 +1,23 @@
 # AI TradeFlow: completion criteria
 
-## Current milestone: polished local MVP
+## Current milestone: v1.2, production-ready, pilot-pending
 
-The web workspace supports an end-to-end demo: receive stock, sell on credit or cash, inspect the party khata, record payment, download a statement, and ask Munshi a grounded question. The dashboard connects receivables and stock alerts directly to the next action. English and Urdu interfaces are available on desktop and mobile web.
+The v1.1 "polished local MVP" listed gates before accepting real customer data. This table records how each was closed, and what is still open.
 
-Order posting with `ledger_method` writes the invoice, stock movement and ledger entries in one database transaction. Cash/bank/wallet settlement creates an invoice and an offsetting payment; credit creates the outstanding balance. Omitting `ledger_method` preserves legacy clients that post ledger entries separately. This compatibility path is not a guarantee of ledger completeness for old clients.
-
-## Gates before accepting real customer data
-
-| Area | Remaining work | Acceptance evidence |
+| Gate | Status | Evidence |
 |---|---|---|
-| Business isolation | Enforce tenant scope in every query, export and agent tool; restrict registration and role assignment | Two-business tests prove no cross-business reads or writes |
-| Accounting precision | Decimal database money columns and immutable historical cost snapshots | Changing today's cost cannot alter yesterday's profit |
-| Posting reliability | Idempotency keys; PostgreSQL concurrency tests; defined cancellation and correction workflow | Retrying an invoice cannot duplicate stock or debt; concurrent sales cannot oversell |
-| Fulfilment | Define draft/partial/delivered transitions and post movements on actual receipt/delivery | Partially received/delivered quantities reconcile with stock |
-| Operations | Strong production secret, database readiness checks, migration-only production startup, backups and restore drill | Restore a test business from backup and run smoke checks |
-| Launch | Provision backend/database, frontend environment and CORS; verify live HTTPS trade cycle | Public deployment passes the same workflow checks as the local demo |
-| Native mobile | Recheck Expo companion separately; bring posting workflows to parity where intended | Device checks and explicitly documented feature scope |
+| Business isolation | **Closed** | Business per sign-up. Tenant scope is enforced for every ORM query, write and Munshi tool (`app/tenancy.py`). Sign-up cannot choose a role; owners add staff via `/team`. Two-business leak tests cover every endpoint (`tests/test_business_isolation.py`) |
+| Accounting precision | **Closed** | `NUMERIC(14,2)` money and `NUMERIC(14,3)` quantities. Weighted-average cost is snapshotted on each sale line. A test proves that changing today's cost cannot alter yesterday's profit |
+| Posting reliability | **Closed** | `Idempotency-Key` on orders and payments. PostgreSQL concurrency tests (oversell race, idempotency race) run in CI. Corrections are owner-only voids by reversal; the free-form status `PATCH` was removed |
+| Fulfilment | **Decided** | An order posts on delivery or receipt. A partial delivery is posted as separate orders, and a return is a void. A draft/partial state machine is not built |
+| Operations | **Partly closed** | Production refuses dev secrets and SQLite; schema is migration-only; `/health/ready`; migration round-trip in CI. A backup-and-restore drill must be run on the chosen host before real data |
+| Launch | **Demo live, backend on hold** | Public demo on Vercel, running in-browser. The backend is not hosted until a customer signs ([DEPLOY.md](DEPLOY.md)) |
+| Native mobile | **Open** | The Expo companion typechecks and bundles; device checks are outstanding |
 
-SQLite is a development convenience. PostgreSQL row locks are used when validating order stock, but concurrent posting has not been validated against a hosted PostgreSQL database. The khata overview batches party and entry reads into two queries; summary queries still need profiling at larger data volumes.
+## Practical launch sequence (unchanged in spirit)
 
-## Practical launch sequence
+1. Pilot with one wholesaler on a small container plus managed PostgreSQL. Run the restore drill first.
+2. Verify opening stock and party balances with the owner before importing real records.
+3. Measure time to record a sale, reconcile khata and prepare a reorder. Use that evidence for the case study and a paid implementation offer.
 
-1. Complete tenant and permission isolation before a public multi-business signup.
-2. Finish accounting and posting reliability gates.
-3. Deploy a small pilot using Vercel for the frontend and a cost-conscious backend/PostgreSQL option such as Koyeb and Neon; confirm current plan limits before provisioning.
-4. Pilot with a single wholesaler using synthetic data first, then verify opening stock and party balances with the owner before importing real records.
-5. Measure time to record a sale, reconcile khata, and prepare a reorder. Use that evidence for the portfolio case study and a paid implementation offer.
-
-Do not describe this milestone as production-complete or invent deployment, business impact, or customer claims.
+Do not describe deployment, business impact or customers that do not exist.
