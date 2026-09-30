@@ -4,8 +4,15 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
+
+# Money is stored as exact NUMERIC (never binary floating point) and read
+# back as a Python float for arithmetic convenience; services quantize to
+# the paisa with Decimal at every posting boundary. Quantities allow three
+# decimals (kg, meters).
+Money = Numeric(14, 2, asdecimal=False)
+Quantity = Numeric(14, 3, asdecimal=False)
 
 
 def new_id() -> str:
@@ -36,6 +43,7 @@ class OrderStatus(str, enum.Enum):
     delivered = "delivered"  # sale orders
     partial = "partial"
     paid = "paid"
+    void = "void"
 
 
 class LedgerEntryType(str, enum.Enum):
@@ -56,6 +64,7 @@ class StockMovementReason(str, enum.Enum):
     sale = "sale"
     adjustment = "adjustment"
     return_ = "return"
+    void = "void"
 
 
 class UserRole(str, enum.Enum):
@@ -64,8 +73,13 @@ class UserRole(str, enum.Enum):
 
 
 class TenantMixin:
-    """Open Decision #2: tenant_id exists on every table now, not yet
-    enforced at the query layer (single-tenant in practice for v1)."""
+    """Every business-owned row carries its business's id.
+
+    Enforcement lives in app/tenancy.py: once a request is authenticated,
+    every ORM SELECT/UPDATE/DELETE on a TenantMixin model is filtered to
+    the caller's business, and every new row is stamped with it. Rows
+    created outside a scoped session (unit tests, scripts) get "default".
+    """
 
     tenant_id: Mapped[str] = mapped_column(String, default="default", index=True)
 

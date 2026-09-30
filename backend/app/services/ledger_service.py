@@ -29,6 +29,7 @@ def record_entry(
     ref_order_id: str | None = None,
     note: str | None = None,
     created_by: str | None = None,
+    idempotency_key: str | None = None,
 ) -> LedgerEntry:
     if db.get(Party, party_id) is None:
         raise ValueError("Party not found")
@@ -49,6 +50,7 @@ def record_entry(
         ref_order_id=ref_order_id,
         note=note,
         created_by=created_by,
+        idempotency_key=idempotency_key,
     )
     db.add(entry)
     db.flush()
@@ -66,7 +68,7 @@ def get_party_balance(db: Session, party_id: str) -> float:
 
     debits = sum(e.amount for e in entries if e.type == "debit")
     credits = sum(e.amount for e in entries if e.type == "credit")
-    return party.opening_balance + debits - credits
+    return round(party.opening_balance + debits - credits, 2)
 
 
 @dataclass

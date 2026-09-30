@@ -6,7 +6,7 @@ arithmetic; the LLM only narrates these numbers, never computes them.
 from dataclasses import dataclass
 from datetime import date as date_type, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.product import Product
@@ -43,21 +43,27 @@ def get_sales_velocity(
         products_stmt = products_stmt.where(Product.id == product_id)
     products = db.execute(products_stmt).scalars().all()
 
+    # One grouped query for every product, instead of one query per SKU.
+    sold_stmt = (
+        select(SaleOrderItem.product_id, func.coalesce(func.sum(SaleOrderItem.qty), 0))
+        .join(SaleOrder, SaleOrder.id == SaleOrderItem.order_id)
+        .where(SaleOrder.date >= since, SaleOrder.date <= as_of, SaleOrder.status != "void")
+        .group_by(SaleOrderItem.product_id)
+    )
+    sold = {pid: float(qty) for pid, qty in db.execute(sold_stmt).all()}
+
     results = []
     for product in products:
-        qty_stmt = (
-            select(SaleOrderItem.qty, SaleOrder.date)
-            .join(SaleOrder, SaleOrder.id == SaleOrderItem.order_id)
-            .where(SaleOrderItem.product_id == product.id, SaleOrder.date >= since, SaleOrder.date <= as_of)
-        )
-        rows = db.execute(qty_stmt).all()
-        qty_sold = sum(row.qty for row in rows)
+        qty_sold = sold.get(product.id, 0.0)
         velocity = qty_sold / days if days > 0 else 0.0
 
         demand_during_lead_time = velocity * DEFAULT_LEAD_TIME_DAYS
         safety_stock = velocity * DEFAULT_SAFETY_STOCK_DAYS
         reorder_point = demand_during_lead_time + safety_stock
-        recommended = max(0.0, reorder_point - product.current_stock)
+        # Never recommend less than it takes to get back to the owner's own
+        # minimum level: a slow seller below its floor still needs ordering.
+        target = max(reorder_point, product.min_stock_level or 0.0)
+        recommended = max(0.0, target - product.current_stock)
 
         results.append(
             VelocityResult(

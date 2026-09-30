@@ -28,7 +28,7 @@ def load_skill_instructions() -> str:
     return SKILL_PATH.read_text(encoding="utf-8")
 
 
-def _build_sdk_agent():
+def _build_sdk_agent(tenant_id: str | None = None):
     """Lazily builds the real Agents SDK agent. Imported lazily so this
     module works even if openai-agents isn't installed in a minimal
     environment (e.g. a CI job that only runs the deterministic tests)."""
@@ -38,31 +38,31 @@ def _build_sdk_agent():
     def get_sales_velocity(product_id: str | None = None, days: int = 30) -> str:
         """Get sales velocity (units/day) and reorder recommendations for
         products. Pass product_id to check one product, or omit for all."""
-        return json.dumps(tools.get_sales_velocity(product_id=product_id, days=days))
+        return json.dumps(tools.get_sales_velocity(product_id=product_id, days=days, tenant_id=tenant_id))
 
     @function_tool
     def get_stock_status(below_min_only: bool = True) -> str:
         """Get current stock levels. Set below_min_only=True to see only
         products below their minimum stock level (reorder alerts)."""
-        return json.dumps(tools.get_stock_status(below_min_only=below_min_only))
+        return json.dumps(tools.get_stock_status(below_min_only=below_min_only, tenant_id=tenant_id))
 
     @function_tool
     def get_receivables_aging(party_id: str | None = None) -> str:
         """Get udhaar (credit) balances and aging buckets (current/30/60/90+
         days overdue) for one party, or all parties if omitted."""
-        return json.dumps(tools.get_receivables_aging(party_id=party_id))
+        return json.dumps(tools.get_receivables_aging(party_id=party_id, tenant_id=tenant_id))
 
     @function_tool
     def get_profit_summary(start: str | None = None, end: str | None = None) -> str:
         """Get a profit and loss summary (revenue, cost, profit) for a date
         range in YYYY-MM-DD format. Defaults to the last 30 days."""
-        return json.dumps(tools.get_profit_summary(start=start, end=end))
+        return json.dumps(tools.get_profit_summary(start=start, end=end, tenant_id=tenant_id))
 
     @function_tool
     def get_party_statement(party_id: str, start: str | None = None, end: str | None = None) -> str:
         """Get a specific party's (customer/supplier) balance and aging
         statement by their party_id."""
-        return json.dumps(tools.get_party_statement(party_id=party_id, start=start, end=end))
+        return json.dumps(tools.get_party_statement(party_id=party_id, start=start, end=end, tenant_id=tenant_id))
 
     async def constitution_guardrail(ctx: RunContextWrapper, agent, agent_input) -> GuardrailFunctionOutput:
         text = agent_input if isinstance(agent_input, str) else str(agent_input)
@@ -88,7 +88,7 @@ def _build_sdk_agent():
     )
 
 
-def _offline_answer(question: str) -> tuple[str, list[str]]:
+def _offline_answer(question: str, tenant_id: str | None = None) -> tuple[str, list[str]]:
     """A deterministic, tool-grounded answer with no LLM narration - used
     whenever OPENAI_API_KEY isn't configured, or the live call failed.
     Picks the most relevant tool(s) via simple keyword matching."""
@@ -104,7 +104,7 @@ def _offline_answer(question: str) -> tuple[str, list[str]]:
         wants_reorder = wants_udhaar = wants_profit = True  # unclear question -> give the full picture
 
     if wants_reorder:
-        data = tools.get_sales_velocity(days=30)
+        data = tools.get_sales_velocity(days=30, tenant_id=tenant_id)
         tools_called.append("get_sales_velocity")
         to_reorder = [p for p in data["products"] if p["recommended_reorder_qty"] > 0]
         if to_reorder:
@@ -114,7 +114,7 @@ def _offline_answer(question: str) -> tuple[str, list[str]]:
             parts.append("Kuch bhi order karne ki zaroorat nahi - stock theek hai.")
 
     if wants_udhaar:
-        data = tools.get_receivables_aging()
+        data = tools.get_receivables_aging(tenant_id=tenant_id)
         tools_called.append("get_receivables_aging")
         oldest = [p for p in data["parties"] if p["aging"].get("90+", 0) > 0]
         if oldest:
@@ -124,20 +124,20 @@ def _offline_answer(question: str) -> tuple[str, list[str]]:
             parts.append("Koi bhi udhaar 90 din se zyada purana nahi hai.")
 
     if wants_profit:
-        data = tools.get_profit_summary()
+        data = tools.get_profit_summary(tenant_id=tenant_id)
         tools_called.append("get_profit_summary")
         parts.append(f"Pichlay 30 din ka profit: Rs {data['profit']:,.0f} (revenue Rs {data['revenue']:,.0f}).")
 
     return "\n\n".join(parts), tools_called
 
 
-def _ask_live(question: str) -> tuple[str, list[str]]:
+def _ask_live(question: str, tenant_id: str | None = None) -> tuple[str, list[str]]:
     """The live LLM path - requires OPENAI_API_KEY and network access."""
     import asyncio
 
     from agents import Runner
 
-    agent = _build_sdk_agent()
+    agent = _build_sdk_agent(tenant_id)
     result = asyncio.run(Runner.run(agent, question))
 
     tools_called = [
@@ -149,7 +149,7 @@ def _ask_live(question: str) -> tuple[str, list[str]]:
     return answer, tools_called
 
 
-def ask_munshi(question: str) -> dict:
+def ask_munshi(question: str, tenant_id: str | None = None) -> dict:
     """The main entrypoint. Always runs the constitution check first -
     a BLOCK never reaches the LLM or the tools at all."""
     constitution_result = check_constitution(question)
@@ -164,15 +164,16 @@ def ask_munshi(question: str) -> dict:
     settings = get_settings()
     if settings.openai_api_key:
         try:
-            answer, tools_called = _ask_live(question)
+            answer, tools_called = _ask_live(question, tenant_id)
         except Exception as exc:  # noqa: BLE001 - any API/SDK failure degrades gracefully
-            offline_answer, tools_called = _offline_answer(question)
+            offline_answer, tools_called = _offline_answer(question, tenant_id)
+            # Don't leak provider error text (it can include account details).
             answer = (
-                f"(Munshi AI's language model is unavailable right now: {exc}. "
-                f"Showing raw data instead.)\n\n{offline_answer}"
+                f"(Munshi AI's language model is unavailable right now ({type(exc).__name__}). "
+                f"Showing the numbers straight from your books instead.)\n\n{offline_answer}"
             )
     else:
-        answer, tools_called = _offline_answer(question)
+        answer, tools_called = _offline_answer(question, tenant_id)
 
     if constitution_result.flagged:
         answer = f"[Needs your review: {constitution_result.flag_reason}]\n\n{answer}"

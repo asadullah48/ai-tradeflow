@@ -13,7 +13,7 @@ router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(get_cu
 
 @router.post("/ask", response_model=AgentAskResponse)
 def ask(payload: AgentAskRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    result = ask_munshi(payload.question)
+    result = ask_munshi(payload.question, tenant_id=user.tenant_id)
 
     log = AgentQuery(
         user_id=user.id,

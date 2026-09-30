@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -13,7 +14,20 @@ router = APIRouter(prefix="/ledger", tags=["ledger"], dependencies=[Depends(get_
 
 
 @router.post("/entries", response_model=LedgerEntryOut, status_code=status.HTTP_201_CREATED)
-def create_entry(payload: LedgerEntryCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def create_entry(
+    payload: LedgerEntryCreate, response: Response, db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    """Record a payment or adjustment. Send an Idempotency-Key so a retried
+    request (flaky shop Wi-Fi, double tap) cannot record the payment twice."""
+    key = (idempotency_key or "").strip()[:120] or None
+    if key:
+        existing = db.query(LedgerEntry).filter(LedgerEntry.idempotency_key == key).first()
+        if existing is not None:
+            response.status_code = status.HTTP_200_OK
+            response.headers["Idempotent-Replay"] = "true"
+            return existing
     try:
         entry = ledger_service.record_entry(
             db,
@@ -25,17 +39,26 @@ def create_entry(payload: LedgerEntryCreate, db: Session = Depends(get_db), user
             ref_order_id=payload.ref_order_id,
             note=payload.note,
             created_by=user.id,
+            idempotency_key=key,
         )
+        db.commit()
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-    db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(LedgerEntry).filter(LedgerEntry.idempotency_key == key).first() if key else None
+        if existing is None:
+            raise
+        response.status_code = status.HTTP_200_OK
+        return existing
     db.refresh(entry)
     return entry
 
 
 @router.get("/parties/{party_id}", response_model=list[LedgerEntryOut])
 def party_ledger(party_id: str, db: Session = Depends(get_db)):
-    return db.query(LedgerEntry).filter(LedgerEntry.party_id == party_id).order_by(LedgerEntry.date).all()
+    return db.query(LedgerEntry).filter(LedgerEntry.party_id == party_id).order_by(LedgerEntry.date, LedgerEntry.created_at).all()
 
 
 @router.get("/parties/{party_id}/balance", response_model=PartyBalance)

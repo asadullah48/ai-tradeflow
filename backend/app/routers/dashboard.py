@@ -19,22 +19,20 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"], dependencies=[Depend
 def get_dashboard(db: Session = Depends(get_db)):
     today = date_type.today()
 
-    todays_orders = db.execute(select(SaleOrder).where(SaleOrder.date == today)).scalars().all()
+    todays_orders = db.execute(select(SaleOrder).where(SaleOrder.date == today, SaleOrder.status != "void")).scalars().all()
     todays_sales_total = sum(o.total for o in todays_orders)
 
     stock_alerts = stock_service.get_stock_alerts(db, below_min_only=True)
 
-    parties = db.execute(select(Party)).scalars().all()
     receivables = 0.0
     payables = 0.0
     exposure: list[dict] = []
-    for party in parties:
-        balance = ledger_service.get_party_balance(db, party.id)
-        if balance > 0:
-            receivables += balance
-            exposure.append({"party_id": party.id, "party_name": party.name, "amount": round(balance, 2)})
-        elif balance < 0:
-            payables += -balance
+    for row in ledger_service.get_all_balances(db):  # two queries, any party count
+        if row["balance"] > 0:
+            receivables += row["balance"]
+            exposure.append({"party_id": row["party_id"], "party_name": row["party_name"], "amount": row["balance"]})
+        elif row["balance"] < 0:
+            payables += -row["balance"]
     exposure.sort(key=lambda x: -x["amount"])
 
     fast_movers, dead_stock = velocity_service.get_fast_movers_and_dead_stock(db, days=30)

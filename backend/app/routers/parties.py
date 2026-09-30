@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_owner
+from app.models.ledger_entry import LedgerEntry
+from app.models.purchase_order import PurchaseOrder
+from app.models.sale_order import SaleOrder
+from app.models.user import User
 from app.database import get_db
 from app.models.party import Party
 from app.schemas.party import PartyCreate, PartyOut, PartyUpdate
@@ -49,9 +53,18 @@ def update_party(party_id: str, payload: PartyUpdate, db: Session = Depends(get_
 
 
 @router.delete("/{party_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_party(party_id: str, db: Session = Depends(get_db)):
+def delete_party(party_id: str, db: Session = Depends(get_db), _: User = Depends(require_owner)):
+    """Owner-only, and only for a party with no trade or khata history:
+    deleting a party must never erase accounting records."""
     party = db.get(Party, party_id)
     if party is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Party not found")
+    has_history = (
+        db.query(LedgerEntry.id).filter(LedgerEntry.party_id == party_id).first()
+        or db.query(SaleOrder.id).filter(SaleOrder.party_id == party_id).first()
+        or db.query(PurchaseOrder.id).filter(PurchaseOrder.party_id == party_id).first()
+    )
+    if has_history or party.opening_balance:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This party has khata or order history and cannot be deleted")
     db.delete(party)
     db.commit()

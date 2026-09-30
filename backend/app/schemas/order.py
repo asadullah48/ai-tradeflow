@@ -1,7 +1,7 @@
 from datetime import date
 
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OrderItemCreate(BaseModel):
@@ -16,9 +16,9 @@ class OrderItemOut(BaseModel):
     qty: float
     unit_price: float
     line_total: float
+    unit_cost: float | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderCreate(BaseModel):
@@ -26,6 +26,9 @@ class OrderCreate(BaseModel):
     date: date
     items: list[OrderItemCreate]
     ledger_method: Literal["udhaar", "cash", "bank", "jazzcash", "easypaisa"] | None = None
+    # Owner-only: post a udhaar sale above the customer's credit limit. The
+    # approval is written onto the invoice's khata line.
+    override_credit_limit: bool = False
 
 
 class OrderOut(BaseModel):
@@ -35,10 +38,10 @@ class OrderOut(BaseModel):
     status: str
     total: float
     items: list[OrderItemOut]
+    void_reason: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
-class OrderStatusUpdate(BaseModel):
-    status: Literal["draft", "received", "delivered", "partial", "paid"]
+class OrderVoid(BaseModel):
+    reason: str = Field(min_length=3, max_length=300)

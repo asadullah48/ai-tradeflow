@@ -43,7 +43,7 @@ def test_list_purchase_orders_endpoint(client, auth_headers):
     assert len(resp.json()) == 1
 
 
-def test_update_sale_order_status(client, auth_headers):
+def test_sale_order_status_is_not_freely_editable_and_void_reverses(client, auth_headers):
     customer = client.post("/parties", json={"name": "Status Customer", "type": "customer"}, headers=auth_headers).json()
     product = client.post("/products", json={"sku": "STATUS-1", "name": "Status Widget"}, headers=auth_headers).json()
     supplier = client.post("/parties", json={"name": "Fixture Supplier", "type": "supplier"}, headers=auth_headers).json()
@@ -55,9 +55,13 @@ def test_update_sale_order_status(client, auth_headers):
         headers=auth_headers,
     ).json()
 
+    # Posted orders are immutable: the old free-form status PATCH is gone.
     resp = client.patch(f"/sale-orders/{order['id']}/status", json={"status": "paid"}, headers=auth_headers)
+    assert resp.status_code in (404, 405)
+    resp = client.post(f"/sale-orders/{order['id']}/void", json={"reason": "Entered twice"}, headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.json()["status"] == "paid"
+    assert resp.json()["status"] == "void"
+    assert client.get(f"/products/{product['id']}", headers=auth_headers).json()["current_stock"] == 1
 
 
 def test_get_purchase_order_not_found(client, auth_headers):

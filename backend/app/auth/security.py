@@ -27,9 +27,11 @@ def verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(truncated, password_hash.encode("utf-8"))
 
 
-def create_access_token(subject: str, role: str) -> str:
+def create_access_token(subject: str, role: str, tenant_id: str | None = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {"sub": subject, "role": role, "exp": expire}
+    if tenant_id is not None:
+        payload["tid"] = tenant_id
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

@@ -34,7 +34,7 @@ def record_movement(
 
     product = db.get(Product, product_id)
     if product is not None:
-        product.current_stock = product.current_stock + qty_delta
+        product.current_stock = round(product.current_stock + qty_delta, 3)
 
     db.flush()
     return movement
@@ -46,7 +46,7 @@ def recompute_current_stock(db: Session, product_id: str) -> float:
     total = db.execute(
         select(StockMovement.qty_delta).where(StockMovement.product_id == product_id)
     ).scalars().all()
-    stock = sum(total)
+    stock = round(sum(total), 3)
 
     product = db.get(Product, product_id)
     if product is not None:
