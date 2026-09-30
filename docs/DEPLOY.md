@@ -12,7 +12,7 @@ vercel deploy --prod --yes
 
 `frontend/vercel.json` sets `NEXT_PUBLIC_DEMO_MODE=browser` at build time and adds security headers. Each visitor's books live in their own `localStorage`, so nothing is shared and nothing is stored server-side.
 
-To have pushes to `main` redeploy it, connect the Vercel project to this repository (Settings → Git) with **Root Directory = `frontend`**.
+The Vercel project is connected to this repository (`vercel git connect`) with **Root Directory = `frontend`** and production branch `master`, so every push to `master` redeploys the demo. The Root Directory was set with `vercel api /v9/projects/<id> -X PATCH -f rootDirectory=frontend`.
 
 ## 2. Real backend (when a customer signs)
 
