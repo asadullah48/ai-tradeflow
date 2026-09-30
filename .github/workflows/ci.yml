@@ -9,6 +9,16 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tradeflow_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -21,11 +31,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Run tests
+      - name: Run tests (SQLite + PostgreSQL concurrency)
         env:
           DATABASE_URL: "sqlite:///./ci.db"
           OPENAI_API_KEY: ""
+          TEST_POSTGRES_URL: "postgresql+psycopg2://postgres:postgres@localhost:5432/tradeflow_ci"
         run: pytest -q
+      - name: Migrations apply cleanly and match the models (PostgreSQL)
+        env:
+          DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost:5432/tradeflow_ci"
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
 
   frontend:
     runs-on: ubuntu-latest
@@ -43,7 +62,13 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
-      - name: Build
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build (API mode)
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
+        run: npm run build
+      - name: Build (browser demo mode)
+        env:
+          NEXT_PUBLIC_DEMO_MODE: "browser"
         run: npm run build

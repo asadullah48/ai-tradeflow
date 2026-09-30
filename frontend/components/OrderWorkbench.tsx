@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Heading, Notice, Loading, Empty, Field } from "./Workspace";
 import { useI18n } from "@/lib/i18n";
-import { api } from "@/lib/api";
+import { api, ApiError, newIdempotencyKey } from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
 import { money, quantity, today } from "@/lib/format";
 type Party = { id: string; name: string; type: string };
 type Product = {
@@ -22,8 +23,10 @@ type Order = {
   date: string;
   status: string;
   total: number;
-  items: Item[];
+  items: (Item & { unit_cost?: number | null })[];
+  void_reason?: string | null;
 };
+type LimitDetail = { message: string; available: number; credit_limit: number; balance: number };
 export default function OrderWorkbench({ sale }: { sale: boolean }) {
   const { t } = useI18n();
   const params = useSearchParams();
@@ -39,6 +42,12 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [idemKey, setIdemKey] = useState(newIdempotencyKey);
+  const [limit, setLimit] = useState<LimitDetail | null>(null);
+  const [voiding, setVoiding] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const isOwner = useAuthStore((s) => s.user?.role) === "owner";
   const endpoint = sale ? "/sale-orders" : "/purchase-orders";
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,25 +105,52 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
     );
   function update(index: number, patch: Partial<Item>) {
     setSuccess(false);
+    setLimit(null);
+    setIdemKey(newIdempotencyKey());
     setItems((current) =>
       current.map((item, i) => (i === index ? { ...item, ...patch } : item)),
     );
   }
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function post(override = false) {
     if (busy || !items.length || short) return;
     setBusy(true);
     setError(null);
     setSuccess(false);
+    setNotice(null);
     try {
-      await api.post<Order>(endpoint, {
-        party_id: party,
-        date,
-        items,
-        ledger_method: method,
-      });
+      // The same key is re-sent if this exact submission is retried (double
+      // tap, dropped connection), so the API posts it once.
+      await api.post<Order>(
+        endpoint,
+        { party_id: party, date, items, ledger_method: method, override_credit_limit: override },
+        { "Idempotency-Key": override ? `${idemKey}-override` : idemKey },
+      );
       setItems([]);
+      setLimit(null);
+      setIdemKey(newIdempotencyKey());
       setSuccess(true);
+      await load();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "credit_limit_exceeded") setLimit(e.detail as LimitDetail);
+      else setError(e instanceof Error ? e.message : t("loadFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    await post(false);
+  }
+  async function confirmVoid(e: React.FormEvent) {
+    e.preventDefault();
+    if (!voiding || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`${endpoint}/${voiding}/void`, { reason: voidReason });
+      setVoiding(null);
+      setVoidReason("");
+      setNotice(t("voided"));
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : t("loadFailed"));
@@ -135,6 +171,11 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
             {t("retry")}
           </button>
         </Notice>
+      )}
+      {notice && (
+        <p role="status" className="mb-4 rounded-xl bg-teal-50 p-4 text-sm text-teal-800">
+          {notice}
+        </p>
       )}
       {success && (
         <p
@@ -160,7 +201,10 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
                 <Field label={t("party")}>
                   <select
                     value={party}
-                    onChange={(e) => setParty(e.target.value)}
+                    onChange={(e) => {
+                      setParty(e.target.value);
+                      setLimit(null);
+                    }}
                     required
                   >
                     <option value="">{t("chooseParty")}</option>
@@ -313,7 +357,10 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
               <Field label={t("paymentMethod")}>
                 <select
                   value={method}
-                  onChange={(e) => setMethod(e.target.value)}
+                  onChange={(e) => {
+                    setMethod(e.target.value);
+                    setLimit(null);
+                  }}
                 >
                   {["udhaar", "cash", "bank", "jazzcash", "easypaisa"].map(
                     (m) => (
@@ -332,6 +379,22 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
                 {t("postingNote")}
               </p>
               {short && <Notice>{t("shortStock")}</Notice>}
+              {limit && (
+                <div role="alert" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                  <p className="font-semibold">{t("creditLimitTitle")}</p>
+                  <p className="mt-1 leading-relaxed">{limit.message}</p>
+                  {isOwner ? (
+                    <>
+                      <button type="button" disabled={busy} onClick={() => post(true)} className="button-secondary mt-3 w-full">
+                        {t("overrideAndPost")}
+                      </button>
+                      <p className="mt-2 text-xs">{t("overrideNote")}</p>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-xs">{t("askOwner")}</p>
+                  )}
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={busy || !items.length || !party || short}
@@ -342,9 +405,10 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
             </aside>
           </form>
           <section className="mt-8">
-            <h2 className="mb-4 text-lg font-semibold">
+            <h2 className="text-lg font-semibold">
               {t("transactionHistory")}
             </h2>
+            <p className="muted mb-4 mt-1 text-xs">{t("voidHelp")}</p>
             {orders.length ? (
               <div className="table-wrap">
                 <table>
@@ -355,11 +419,14 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
                       <th>{t("product")}</th>
                       <th>{t("status")}</th>
                       <th>{t("total")}</th>
+                      <th>
+                        <span className="sr-only">{t("voidOrder")}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {orders.map((o) => (
-                      <tr key={o.id}>
+                      <tr key={o.id} className={o.status === "void" ? "text-slate-400" : undefined}>
                         <td>
                           {parties.find((p) => p.id === o.party_id)?.name ??
                             o.party_id}
@@ -374,10 +441,43 @@ export default function OrderWorkbench({ sale }: { sale: boolean }) {
                             .join(", ")}
                         </td>
                         <td>
-                          <span className="pill">{o.status}</span>
+                          <span
+                            className={`pill ${o.status === "void" ? "!bg-slate-100 !text-slate-500" : ""}`}
+                            title={o.void_reason ?? undefined}
+                          >
+                            {o.status === "void" ? t("void") : o.status}
+                          </span>
                         </td>
-                        <td className="number font-semibold">
+                        <td className={`number font-semibold ${o.status === "void" ? "line-through" : ""}`}>
                           {money(o.total)}
+                        </td>
+                        <td>
+                          {isOwner && o.status !== "void" && (
+                            voiding === o.id ? (
+                              <form onSubmit={confirmVoid} className="flex min-w-[260px] items-center gap-2">
+                                <label className="sr-only" htmlFor={`void-${o.id}`}>{t("voidReason")}</label>
+                                <input id={`void-${o.id}`} required minLength={3} maxLength={300} autoFocus
+                                  placeholder={t("voidReason")} value={voidReason}
+                                  onChange={(e) => setVoidReason(e.target.value)} className="!py-2" />
+                                <button type="submit" disabled={busy} className="whitespace-nowrap text-red-700 underline">
+                                  {t("voidConfirm")}
+                                </button>
+                                <button type="button" onClick={() => setVoiding(null)} className="muted underline">
+                                  {t("cancel")}
+                                </button>
+                              </form>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setVoiding(o.id);
+                                  setVoidReason("");
+                                }}
+                                className="text-red-700 underline"
+                              >
+                                {t("voidOrder")}
+                              </button>
+                            )
+                          )}
                         </td>
                       </tr>
                     ))}

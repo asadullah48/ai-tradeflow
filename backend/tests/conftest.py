@@ -49,8 +49,17 @@ def db_session(monkeypatch):
 
 @pytest.fixture()
 def client(db_session):
+    # A fresh session per request, like production: the tenant scope set by
+    # get_current_user lives on that session and dies with the request, so
+    # two-business tests cannot pass by accident through a shared identity map.
+    session_factory = app_database.SessionLocal
+
     def override_get_db():
-        yield db_session
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
     from fastapi.testclient import TestClient

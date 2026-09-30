@@ -4,8 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import RequireAuth from "@/components/RequireAuth";
 import { Heading, Field, Notice, Loading } from "@/components/Workspace";
-import { api, apiFileUrl } from "@/lib/api";
-import { useAuthStore } from "@/lib/store";
+import { api, newIdempotencyKey } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { money, today } from "@/lib/format";
 type Balance = {
@@ -34,6 +33,8 @@ function Content() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [payKey, setPayKey] = useState(newIdempotencyKey);
+  const [reminder, setReminder] = useState<string | null>(null);
   const load = useCallback(async () => {
     try {
       const [b, e] = await Promise.all([
@@ -42,6 +43,10 @@ function Content() {
       ]);
       setBalance(b);
       setEntries(e);
+      if (b.balance > 0) {
+        const desk = await api.get<{ customers: { party_id: string; whatsapp_url: string | null }[] }>("/collections");
+        setReminder(desk.customers.find((c) => c.party_id === partyId)?.whatsapp_url ?? null);
+      } else setReminder(null);
       setDirection(b.balance < 0 ? "debit" : "credit");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("loadFailed"));
@@ -58,13 +63,12 @@ function Content() {
     setError(null);
     setSaved(false);
     try {
-      await api.post("/ledger/entries", {
-        party_id: partyId,
-        date: today(),
-        type: direction,
-        amount: Number(amount),
-        method,
-      });
+      await api.post(
+        "/ledger/entries",
+        { party_id: partyId, date: today(), type: direction, amount: Number(amount), method },
+        { "Idempotency-Key": payKey },
+      );
+      setPayKey(newIdempotencyKey());
       setAmount("");
       setSaved(true);
       await load();
@@ -88,14 +92,7 @@ function Content() {
   }
   async function pdf() {
     try {
-      const r = await fetch(
-        apiFileUrl(`/reports/party-statement/${partyId}/pdf`),
-        {
-          headers: { Authorization: `Bearer ${useAuthStore.getState().token}` },
-        },
-      );
-      if (!r.ok) throw new Error();
-      const url = URL.createObjectURL(await r.blob());
+      const url = URL.createObjectURL(await api.blob(`/reports/party-statement/${partyId}/pdf`));
       const a = document.createElement("a");
       a.href = url;
       a.download = `statement-${partyId}.pdf`;
@@ -133,6 +130,11 @@ function Content() {
                 <button onClick={pdf} className="button-secondary">
                   {t("downloadPdf")}
                 </button>
+                {reminder && (
+                  <a href={reminder} target="_blank" rel="noreferrer" className="button-primary">
+                    {t("remindWhatsApp")}
+                  </a>
+                )}
               </div>
             }
           />
@@ -180,7 +182,10 @@ function Content() {
                   step="0.01"
                   required
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => {
+                    setAmount(e.target.value);
+                    setPayKey(newIdempotencyKey());
+                  }}
                 />
               </Field>
               <Field label={t("paymentDirection")}>
@@ -217,20 +222,29 @@ function Content() {
                   <th>{t("paymentMethod")}</th>
                   <th>{t("note")}</th>
                   <th>{t("amount")}</th>
+                  <th>{t("balance")}</th>
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
-                  <tr key={e.id}>
-                    <td className="number">{e.date}</td>
-                    <td>{e.method}</td>
-                    <td>{e.note ?? "—"}</td>
-                    <td className="number font-medium">
-                      {e.type === "debit" ? "+" : "−"}
-                      {money(e.amount)}
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  // Running balance, oldest first — the way a paper khata reads.
+                  let running = balance.balance - entries.reduce((a, x) => a + (x.type === "debit" ? x.amount : -x.amount), 0);
+                  return entries.map((e) => {
+                    running += e.type === "debit" ? e.amount : -e.amount;
+                    return (
+                      <tr key={e.id}>
+                        <td className="number">{e.date}</td>
+                        <td>{e.method}</td>
+                        <td className="whitespace-normal">{e.note ?? "—"}</td>
+                        <td className="number font-medium">
+                          {e.type === "debit" ? "+" : "−"}
+                          {money(e.amount)}
+                        </td>
+                        <td className="number muted">{money(running)}</td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
             {!entries.length && (

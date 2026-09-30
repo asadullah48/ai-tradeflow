@@ -4,7 +4,14 @@ import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-type User = { id: string; name: string; phone: string; role: string };
+export type User = {
+  id: string;
+  name: string;
+  phone: string;
+  role: string;
+  business_id?: string;
+  business_name?: string;
+};
 
 type AuthState = {
   token: string | null;

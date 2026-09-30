@@ -1,6 +1,8 @@
 """Profit & loss summary - deterministic, derived from actual sale prices
-vs. each product's recorded cost_price. Used by the dashboard and by
-Munshi AI's "profit summary" question."""
+vs. the weighted-average cost SNAPSHOTTED on each sale line at the time of
+sale. Editing a product's cost today therefore cannot rewrite yesterday's
+profit. Voided sales are excluded. Used by the dashboard, the daily brief
+and Munshi AI's "profit summary" question."""
 
 from datetime import date as date_type
 
@@ -16,7 +18,7 @@ def get_profit_summary(db: Session, *, start: date_type, end: date_type) -> dict
         select(SaleOrderItem, SaleOrder.date, Product.cost_price, Product.name)
         .join(SaleOrder, SaleOrder.id == SaleOrderItem.order_id)
         .join(Product, Product.id == SaleOrderItem.product_id)
-        .where(SaleOrder.date >= start, SaleOrder.date <= end)
+        .where(SaleOrder.date >= start, SaleOrder.date <= end, SaleOrder.status != "void")
     )
     rows = db.execute(stmt).all()
 
@@ -26,7 +28,9 @@ def get_profit_summary(db: Session, *, start: date_type, end: date_type) -> dict
 
     for item, _order_date, cost_price, product_name in rows:
         line_revenue = item.line_total
-        line_cost = item.qty * cost_price
+        # Legacy rows posted before cost snapshots fall back to current cost.
+        unit_cost = item.unit_cost if item.unit_cost is not None else cost_price
+        line_cost = item.qty * unit_cost
         revenue += line_revenue
         cost += line_cost
 

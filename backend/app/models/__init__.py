@@ -1,5 +1,6 @@
 """Import every model so Base.metadata (and Alembic autogenerate) sees them all."""
 
+from app.models.business import Business
 from app.models.user import User
 from app.models.party import Party
 from app.models.product import Product
@@ -10,6 +11,7 @@ from app.models.stock_movement import StockMovement
 from app.models.agent_query import AgentQuery
 
 __all__ = [
+    "Business",
     "User",
     "Party",
     "Product",
